@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "client",
+    "slug": "client",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/newfitlogo.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Allow Face ID to log you in quickly and securely."
+      },
+      "bundleIdentifier": "com.anonymous.client"
+    },
+    "edgeToEdgeEnabled": true,
+    "package": "com.anonymous.client",
+    "android": {
+      "package": "com.anonymous.client"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
+  },
+  "web": {
+    "favicon": "./assets/favicon.png"
+  },
+  "extra": {
+    "API_BASE_URL": "http://localhost:3004"
+  },
+  "plugins": [
+    "expo-secure-store",
+    "expo-font"
+  ]
+}
