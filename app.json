@@ -13,23 +13,18 @@
       },
       "bundleIdentifier": "com.anonymous.client"
     },
-    "edgeToEdgeEnabled": true,
-    "package": "com.anonymous.client",
     "android": {
       "package": "com.anonymous.client"
     },
     "plugins": [
-      "expo-secure-store"
-    ]
-  },
-  "web": {
-    "favicon": "./assets/favicon.png"
-  },
-  "extra": {
-    "API_BASE_URL": "http://localhost:3004"
-  },
-  "plugins": [
-    "expo-secure-store",
-    "expo-font"
-  ]
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "API_BASE_URL": "http://localhost:3004"
+    }
+  }
 }

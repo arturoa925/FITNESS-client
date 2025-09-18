@@ -1,4 +1,5 @@
 
+
 // client/screens/Welcome.js
 import { useEffect, useState } from "react";
 import {
@@ -12,30 +13,26 @@ import {
 import tw from "twrnc";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
-    
-
-    
-// load saved pref on mount
-useEffect(() => {
-  (async () => {
-    const saved = await SecureStore.getItemAsync("use_biometrics");
-    if (saved === "true") setUseBiometrics(true);
-  })();
-}, []);
-
-const [authBusy, setAuthBusy] = useState(false);
-
 
 export default function Welcome({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  
 
   // Biometrics state
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState("Biometrics");
   const [useBiometrics, setUseBiometrics] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
 
+  // Load saved preference on mount
+  useEffect(() => {
+    (async () => {
+      const saved = await SecureStore.getItemAsync("use_biometrics");
+      if (saved === "true") setUseBiometrics(true);
+    })();
+  }, []);
+
+  // Check device biometric capabilities
   useEffect(() => {
     (async () => {
       try {
@@ -45,67 +42,67 @@ export default function Welcome({ navigation }) {
         const hasFace = types?.includes(
           LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION
         );
-                
-        console.log('Biometric debug:', { hasHardware, isEnrolled, types, hasFace });
+
+        console.log("Biometric debug:", { hasHardware, isEnrolled, types, hasFace });
 
         setBiometricSupported(hasHardware && isEnrolled);
         setBiometricLabel(
           Platform.OS === "ios" && hasFace ? "Face ID" : "Biometrics"
         );
-      } catch {
-        console.log('Biometric check failed', e);
-        setBiometricSupported(false);r
+      } catch (e) {
+        console.log("Biometric check failed", e);
+        setBiometricSupported(false);
       }
     })();
   }, []);
 
-// toggle handler for face id
-const toggleBiometrics = async () => {
-  if (authBusy) return;
-  if (!useBiometrics) {
-    if (!biometricSupported) return;
-    try {
-      setAuthBusy(true);
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: `Enable ${biometricLabel}`,
-        cancelLabel: "Cancel",
-        disableDeviceFallback: true,
-      });
-      if (result.success) {
-        setUseBiometrics(true);
-        await SecureStore.setItemAsync("use_biometrics", "true");
+  // toggle handler for face id
+  const toggleBiometrics = async () => {
+    if (authBusy) return;
+    if (!useBiometrics) {
+      if (!biometricSupported) return;
+      try {
+        setAuthBusy(true);
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: `Enable ${biometricLabel}`,
+          cancelLabel: "Cancel",
+          disableDeviceFallback: true,
+        });
+        if (result.success) {
+          setUseBiometrics(true);
+          await SecureStore.setItemAsync("use_biometrics", "true");
+        }
+        // do nothing on cancel/failure
+      } finally {
+        setAuthBusy(false);
       }
-      // do nothing on cancel/failure
+    } else {
+      setUseBiometrics(false);
+      await SecureStore.setItemAsync("use_biometrics", "false");
+    }
+  };
+
+  // login handler
+  const handleLogin = async () => {
+    if (authBusy) return;
+    try {
+      if (useBiometrics) {
+        setAuthBusy(true);
+        const res = await LocalAuthentication.authenticateAsync({
+          promptMessage: `Authenticate with ${biometricLabel}`,
+          cancelLabel: "Cancel",
+          disableDeviceFallback: true,
+        });
+        if (!res.success) return; // user canceled or failed
+      }
+
+      // TODO: call your backend here with email/password
+      // const { data } = await api.post('/auth/login', { email, password })
+      // save token, navigate, etc.
     } finally {
       setAuthBusy(false);
     }
-  } else {
-    setUseBiometrics(false);
-    await SecureStore.setItemAsync("use_biometrics", "false");
-  }
-};
-
-// login handler
-const handleLogin = async () => {
-  if (authBusy) return;
-  try {
-    if (useBiometrics) {
-      setAuthBusy(true);
-      const res = await LocalAuthentication.authenticateAsync({
-        promptMessage: `Authenticate with ${biometricLabel}`,
-        cancelLabel: "Cancel",
-        disableDeviceFallback: true,
-      });
-      if (!res.success) return; // user canceled or failed
-    }
-
-    // TODO: call your backend here with email/password
-    // const { data } = await api.post('/auth/login', { email, password })
-    // save token, navigate, etc.
-  } finally {
-    setAuthBusy(false);
-  }
-};
+  };
 
   return (
     <View
