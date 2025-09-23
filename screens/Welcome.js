@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  Pressable
 } from "react-native";
 import tw from "twrnc";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -23,6 +24,7 @@ export default function Welcome({ navigation }) {
   const [useBiometrics, setUseBiometrics] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
 
+  // * face id setup
   // Load saved preference on mount
   useEffect(() => {
     (async () => {
@@ -61,7 +63,7 @@ export default function Welcome({ navigation }) {
     })();
   }, []);
 
-  // toggle handler for face id
+  // * toggle handler for face id
   const toggleBiometrics = async () => {
     if (authBusy) return;
     if (!useBiometrics) {
@@ -87,7 +89,7 @@ export default function Welcome({ navigation }) {
     }
   };
 
-  // login handler
+  // *login handler
   const handleLogin = async () => {
     if (authBusy) return;
     try {
@@ -110,6 +112,7 @@ export default function Welcome({ navigation }) {
   };
 
   return (
+    // * top level container
     <View
       style={[tw`flex-1 justify-center px-6`, { backgroundColor: "#A4A4A4" }]}
     >
@@ -137,6 +140,8 @@ export default function Welcome({ navigation }) {
       >
         Log in to access your workouts and track every rep, set, and sweat!
       </Text>
+
+      // * input fields
       <TextInput
         placeholder="Email"
         value={email}
@@ -152,7 +157,7 @@ export default function Welcome({ navigation }) {
         secureTextEntry
         style={tw`bg-white rounded-xl px-4 py-3 mb-4`}
       />
-      {/* Checkbox row – above the login button */}
+     // * face id section
       <TouchableOpacity
         onPress={toggleBiometrics}
         activeOpacity={0.8}
@@ -168,7 +173,7 @@ export default function Welcome({ navigation }) {
           Use {biometricLabel} to login
         </Text>
 
-        {/* Simple checkbox UI */}
+        // * face id checkbox
         <View
           style={tw`w-6 h-6 rounded-md border ${
             biometricSupported ? "border-gray-500" : "border-gray-300"
@@ -177,8 +182,12 @@ export default function Welcome({ navigation }) {
           {useBiometrics ? <Text style={tw`text-black`}>✓</Text> : null}
         </View>
       </TouchableOpacity>
-      <TouchableOpacity
-        style={tw`bg-[#8CBFDF] rounded-xl py-3`}
+     
+     <Pressable
+               style={({ pressed }) => [
+          tw`rounded-xl py-3`,
+          { backgroundColor: pressed ? "#5a9cc6" : "#8CBFDF" }
+        ]}
         onPress={handleLogin}
         activeOpacity={0.8}
       >
@@ -190,10 +199,15 @@ export default function Welcome({ navigation }) {
         >
           Log In
         </Text>
-      </TouchableOpacity>
+      </Pressable>
+
+      // * registration 
       <View style={tw`mt-4`}>
-        <TouchableOpacity
-          style={tw`bg-[#EDEDED] rounded-xl py-3`}
+        <Pressable
+           style={({ pressed }) => [
+          tw`rounded-xl py-3`,
+          { backgroundColor: pressed ? "#b3d3ddff" : "#EDEDED" }
+        ]}
           onPress={handleLogin}
           activeOpacity={0.8}
         >
@@ -205,7 +219,7 @@ export default function Welcome({ navigation }) {
           >
             Click here to Register
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
       
       
