@@ -19,6 +19,12 @@ import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Welcome({ navigation }) {
+
+// * register route
+  const handleRegisterPress = () => {
+    navigation.navigate("Register");
+  };
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -237,7 +243,7 @@ export default function Welcome({ navigation }) {
                     tw`w-full rounded-xl py-3`,
                     { backgroundColor: pressed ? "#A4DFF2" : "#EDEDED" },
                   ]}
-                  onPress={handleLogin}
+                  onPress={handleRegisterPress}
                 >
                   <Text
                     style={[

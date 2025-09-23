@@ -6,6 +6,7 @@ import { useFonts } from 'expo-font';
 // import AppLoading from "expo-app-loading";
 import Loading from "./screens/Loading";
 import Welcome from "./screens/Welcome";
+import Register from "./screens/Register";
 
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -41,7 +42,7 @@ export default function App() {
         <NavigationContainer>
           <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Welcome" component={Welcome} />
-            {/* Later: <Stack.Screen name="Home" component={HomeScreen} /> */}
+            <Stack.Screen name="Register" component={Register} />
           </Stack.Navigator>
         </NavigationContainer>
       )}
