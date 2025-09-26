@@ -9,7 +9,9 @@
     "newArchEnabled": true,
     "ios": {
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Allow Face ID to log you in quickly and securely."
+        "NSFaceIDUsageDescription": "Allow Face ID to log you in quickly and securely.",
+         "NSPhotoLibraryUsageDescription": "Allow access to choose a profile photo.",
+        "NSCameraUsageDescription": "Allow camera access to take a profile photo."
       },
       "bundleIdentifier": "com.anonymous.client"
     },

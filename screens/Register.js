@@ -11,10 +11,12 @@ import {
   useWindowDimensions,
   KeyboardAvoidingView,
   ScrollView,
+  Image,
 } from "react-native";
 import tw from "twrnc";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
+import * as ImagePicker from "expo-image-picker";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -35,6 +37,7 @@ export default function Register() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [photo, setPhoto] = useState(null); 
 
   // * biometrics (Face ID / Touch ID)
   const [biometricSupported, setBiometricSupported] = useState(false);
@@ -122,7 +125,7 @@ export default function Register() {
       // const res = await fetch(`${API_BASE}/auth/register`, {
       //   method: "POST",
       //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ firstName, lastName, email, password }),
+      //   body: JSON.stringify({ firstName, lastName, email, password, photo }),
       // });
       // if (!res.ok) throw new Error("Signup failed");
       // const data = await res.json();
@@ -135,6 +138,30 @@ export default function Register() {
       // navigation.navigate("Home");
     } catch (e) {
       Alert.alert("Sign up failed", e?.message || "Please try again.");
+    }
+  };
+
+  // Photo picker helper
+  const pickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Please allow photo library access to upload a profile photo.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+
+      if (!result.canceled && result.assets?.length) {
+        setPhoto(result.assets[0].uri);
+      }
+    } catch (e) {
+      Alert.alert("Error", "Could not open photo library.");
     }
   };
 
@@ -329,14 +356,23 @@ export default function Register() {
                   alignItems: "center",
                 },
               ]}
-              onPress={() => {
-                // TODO: implement photo picker
-                Alert.alert("Upload Photo", "Open photo library here");
-              }}
+              onPress={pickImage}
             >
-              <Text style={{ color: "#000", fontSize: 14, textAlign: "center" }}>
-                Upload Photo
-              </Text>
+              {photo ? (
+                <Image
+                  source={{ uri: photo }}
+                  style={{
+                    width: profileIconSize * 0.9,
+                    height: profileIconSize * 0.9,
+                    borderRadius: (profileIconSize * 0.9) / 2,
+                    resizeMode: "cover",
+                  }}
+                />
+              ) : (
+                <Text style={{ color: "#000", fontSize: 14, textAlign: "center" }}>
+                  Upload Photo
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
 
