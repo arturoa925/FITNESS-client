@@ -1,5 +1,5 @@
 // client/screens/Welcome.js
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -162,7 +162,7 @@ export default function Welcome({ navigation }) {
   };
 
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       let didPrompt = false;
       (async () => {
         if (useBiometrics && biometricSupported && !authBusy && !didPrompt) {

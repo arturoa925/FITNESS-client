@@ -148,7 +148,7 @@ export default function Register() {
           contentContainerStyle={[tw`flex-grow`, { paddingVertical: 24 }]}
           keyboardShouldPersistTaps="handled"
         >
-          // * title with icon
+          {/* title with icon */}
           <View style={[tw` items-center `, { paddingHorizontal: 16 }]}>
             <View
               style={{
@@ -179,7 +179,7 @@ export default function Register() {
               </View>
             </View>
           </View>
-          // * first and last name input fields
+          {/* first and last name input fields */}
           <View style={{ width: maxWidth, alignSelf: "center" }}>
             <View
               style={[
@@ -219,7 +219,7 @@ export default function Register() {
               />
             </View>
           </View>
-          // * email and password input fields
+          {/* email and password input fields */}
           <View style={[tw` items-center `, { paddingHorizontal: 16 }]}>
             <View
               style={{
@@ -316,7 +316,7 @@ export default function Register() {
             </View>
           </View>
 
-          // * profile photo upload placeholder circle
+          {/* profile photo upload placeholder circle */}
           <View style={[tw`items-center mt-2`]}>
             <TouchableOpacity
               style={[
