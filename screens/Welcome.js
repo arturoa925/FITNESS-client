@@ -17,6 +17,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 
 export default function Welcome({ navigation }) {
 
@@ -27,6 +28,7 @@ export default function Welcome({ navigation }) {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [biometricEmail, setBiometricEmail] = useState("");
 
   // Biometrics state
   const [biometricSupported, setBiometricSupported] = useState(false);
@@ -44,11 +46,16 @@ export default function Welcome({ navigation }) {
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
 
   // * face id setup
-  // Load saved preference on mount
+  // Load saved preference + stored email on mount
   useEffect(() => {
     (async () => {
       const saved = await SecureStore.getItemAsync("use_biometrics");
       if (saved === "true") setUseBiometrics(true);
+      const savedEmail = await SecureStore.getItemAsync("biometricEmail");
+      if (savedEmail) {
+        setBiometricEmail(savedEmail);
+        if (!email) setEmail(savedEmail);
+      }
     })();
   }, []);
 
@@ -81,6 +88,30 @@ export default function Welcome({ navigation }) {
       }
     })();
   }, []);
+
+  const handleBiometricLogin = async () => {
+    if (authBusy) return;
+    try {
+      setAuthBusy(true);
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: `Authenticate with ${biometricLabel}`,
+        cancelLabel: "Cancel",
+        disableDeviceFallback: true,
+      });
+      if (!result.success) return;
+      const loginEmail = biometricEmail || email;
+      if (!loginEmail) {
+        Alert.alert("Missing email", "No email found for biometric login. Please enter your email.");
+        return;
+      }
+      // TODO: call your backend with loginEmail (and a stored refresh token if you use token-based auth)
+      // Example:
+      // const { data } = await api.post('/auth/biometric-login', { email: loginEmail })
+      // save token, navigate, etc.
+    } finally {
+      setAuthBusy(false);
+    }
+  };
 
   // * toggle handler for face id
   const toggleBiometrics = async () => {
@@ -129,6 +160,21 @@ export default function Welcome({ navigation }) {
       setAuthBusy(false);
     }
   };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      let didPrompt = false;
+      (async () => {
+        if (useBiometrics && biometricSupported && !authBusy && !didPrompt) {
+          didPrompt = true;
+          try {
+            await handleBiometricLogin();
+          } catch {}
+        }
+      })();
+      return () => {};
+    }, [useBiometrics, biometricSupported, authBusy, biometricEmail, email])
+  );
 
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
@@ -205,7 +251,10 @@ export default function Welcome({ navigation }) {
                   disabled: !biometricSupported,
                 }}
                 disabled={!biometricSupported || authBusy}
-                style={tw`flex-row items-center justify-between mb-6 mt-2`}
+                style={[
+                  { width: maxWidth, alignSelf: "center", paddingHorizontal: isShort ? 16 : 24 },
+                  tw`flex-row items-center justify-between mt-2 mb-4`
+                ]}
               >
                 <Text style={tw`text-base text-gray-900 text-lg`}>
                   Use {biometricLabel} to login
@@ -217,6 +266,33 @@ export default function Welcome({ navigation }) {
                   {useBiometrics ? <Text style={tw`text-black`}>✓</Text> : null}
                 </View>
               </TouchableOpacity>
+
+              {/* biometric login button (conditional) */}
+              {biometricSupported && useBiometrics ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    tw`rounded-xl py-3`,
+                    {
+                      width: maxWidth,
+                      alignSelf: "center",
+                      backgroundColor: pressed ? "#9bd2b1" : "#BEE3C6",
+                    },
+                  ]}
+                  onPress={handleBiometricLogin}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Login with ${biometricLabel}`}
+                  disabled={authBusy}
+                >
+                  <Text
+                    style={[
+                      tw`text-black text-center font-semibold text-xl`,
+                      { fontFamily: "Manrope" },
+                    ]}
+                  >
+                    Login with {biometricLabel}
+                  </Text>
+                </Pressable>
+              ) : null}
 
               {/* primary login button */}
              <Pressable

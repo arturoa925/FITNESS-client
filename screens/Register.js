@@ -90,7 +90,7 @@ export default function Register() {
     }
   };
 
-  // Call this after your account creation succeeds (e.g., in your submit handler)
+  // * Call this after your account creation succeeds (e.g., in your submit handler)
   const persistBiometricAfterSignup = async (userEmail) => {
     try {
       if (useBiometrics) {
