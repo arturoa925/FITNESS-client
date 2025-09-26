@@ -219,10 +219,14 @@ export default function Welcome({ navigation }) {
               </TouchableOpacity>
 
               {/* primary login button */}
-              <Pressable
+             <Pressable
                 style={({ pressed }) => [
-                  tw`w-full rounded-xl py-3 mt-4`,
-                  { backgroundColor: pressed ? "#5a9cc6" : "#8CBFDF" },
+                  tw`rounded-xl py-3 mt-4`,
+                  {
+                    width: maxWidth,
+                    alignSelf: "center",
+                    backgroundColor: pressed ? "#5a9cc6" : "#8CBFDF",
+                  },
                 ]}
                 onPress={handleLogin}
               >

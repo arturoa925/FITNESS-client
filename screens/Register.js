@@ -36,6 +36,108 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  // * biometrics (Face ID / Touch ID)
+  const [biometricSupported, setBiometricSupported] = useState(false);
+  const [biometricLabel, setBiometricLabel] = useState("Face ID");
+  const [useBiometrics, setUseBiometrics] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+        const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+        const supportsFace = types?.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
+        const supportsFingerprint = types?.includes(LocalAuthentication.AuthenticationType.FINGERPRINT);
+        setBiometricSupported(!!(hasHardware && isEnrolled && types && types.length > 0));
+        setBiometricLabel(supportsFace ? "Face ID" : supportsFingerprint ? "Touch ID" : "Biometrics");
+        // restore saved preference
+        const saved = await SecureStore.getItemAsync("useBiometrics");
+        setUseBiometrics(saved === "true");
+      } catch (e) {
+        setBiometricSupported(false);
+      }
+    })();
+  }, []);
+
+  const toggleBiometrics = async () => {
+    if (!biometricSupported || authBusy) return;
+    try {
+      setAuthBusy(true);
+      if (!useBiometrics) {
+        // User is turning ON biometrics: authenticate once to opt-in
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: `Enable ${biometricLabel}`,
+          cancelLabel: "Cancel",
+          disableDeviceFallback: false,
+        });
+        if (!result.success) {
+          Alert.alert("Authentication failed", `Could not enable ${biometricLabel}.`);
+          return;
+        }
+      }
+      const next = !useBiometrics;
+      setUseBiometrics(next);
+      await SecureStore.setItemAsync("useBiometrics", next ? "true" : "false");
+      if (next && email) {
+        await SecureStore.setItemAsync("biometricEmail", email);
+      }
+    } catch (err) {
+      Alert.alert("Error", "There was a problem updating your biometric preference.");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  // Call this after your account creation succeeds (e.g., in your submit handler)
+  const persistBiometricAfterSignup = async (userEmail) => {
+    try {
+      if (useBiometrics) {
+        await SecureStore.setItemAsync("useBiometrics", "true");
+        if (userEmail) await SecureStore.setItemAsync("biometricEmail", userEmail);
+      }
+    } catch {}
+  };
+
+  // * create account handler
+  const handleCreateAccount = async () => {
+    // basic validation
+    if (!firstName.trim() || !lastName.trim()) {
+      Alert.alert("Missing info", "Please enter your first and last name.");
+      return;
+    }
+    if (!email.trim()) {
+      Alert.alert("Missing email", "Please enter your email address.");
+      return;
+    }
+    if (!password || password.length < 6) {
+      Alert.alert("Password too short", "Use at least 6 characters.");
+      return;
+    }
+  
+    try {
+      // TODO: Replace this with your real API call
+      // Example:
+      // const res = await fetch(`${API_BASE}/auth/register`, {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify({ firstName, lastName, email, password }),
+      // });
+      // if (!res.ok) throw new Error("Signup failed");
+      // const data = await res.json();
+  
+      // Persist biometric preference alongside the newly created account
+      await persistBiometricAfterSignup(email);
+  
+      Alert.alert("Welcome!", "Your account has been created.");
+      // TODO: navigate to your app's home screen here if using a navigator
+      // navigation.navigate("Home");
+    } catch (e) {
+      Alert.alert("Sign up failed", e?.message || "Please try again.");
+    }
+  };
+
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
       <KeyboardAvoidingView
@@ -58,7 +160,7 @@ export default function Register() {
               {/* Title */}
               <Text
                 style={[
-                  tw`mb-6 text-center`,
+                  tw`mb-4 text-center`,
                   { color: "#87DAF0", fontFamily: "Joan", fontSize: h1Size },
                 ]}
               >
@@ -81,7 +183,7 @@ export default function Register() {
           <View style={{ width: maxWidth, alignSelf: "center" }}>
             <View
               style={[
-                tw`w-full mt-2`,
+                tw`w-full  `,
                 { flexDirection: isNarrow ? "column" : "row" },
               ]}
             >
@@ -215,7 +317,7 @@ export default function Register() {
           </View>
 
           // * profile photo upload placeholder circle
-          <View style={[tw`items-center mt-6`]}>
+          <View style={[tw`items-center mt-2`]}>
             <TouchableOpacity
               style={[
                 tw`rounded-full`,
@@ -237,6 +339,55 @@ export default function Register() {
               </Text>
             </TouchableOpacity>
           </View>
+
+           {/* face id section */}
+              <TouchableOpacity
+                onPress={toggleBiometrics}
+                activeOpacity={0.8}
+                accessibilityRole="checkbox"
+                accessibilityState={{
+                  checked: useBiometrics,
+                  disabled: !biometricSupported,
+                }}
+                disabled={!biometricSupported || authBusy}
+                style={[
+                  { width: maxWidth, alignSelf: "center", paddingHorizontal: isShort ? 16 : 24 },
+                  tw`flex-row items-center justify-between mt-4 mb-6`
+                ]}
+              >
+                <Text style={tw`text-base text-gray-900 text-lg`}>
+                  Use {biometricLabel} to login
+                </Text>
+                {/* face id checkbox */}
+                <View
+                  style={tw`w-6 h-6 rounded-md border bg-white items-center justify-center`}
+                >
+                  {useBiometrics ? <Text style={tw`text-black`}>✓</Text> : null}
+                </View>
+              </TouchableOpacity>
+
+              <Pressable
+                style={({ pressed }) => [
+                  tw`rounded-xl py-3 mt-3 `,
+                  {
+                    width: maxWidth,
+                    alignSelf: "center",
+                    backgroundColor: pressed ? "#5a9cc6" : "#8CBFDF",
+                  },
+                ]}
+                onPress={handleCreateAccount}
+                accessibilityRole="button"
+                accessibilityLabel="Create Account"
+              >
+                <Text
+                  style={[
+                    tw`text-black text-center font-semibold text-xl`,
+                    { fontFamily: "Manrope" },
+                  ]}
+                >
+                  Start Sweating
+                </Text>
+              </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
