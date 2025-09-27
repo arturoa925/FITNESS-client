@@ -1,5 +1,5 @@
 // client/screens/Register.js
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -13,12 +13,14 @@ import {
   ScrollView,
   Image,
 } from "react-native";
+import { PanResponder } from "react-native";
 import tw from "twrnc";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import * as ImagePicker from "expo-image-picker";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
 
 export default function Register() {
   // * responsive design
@@ -31,6 +33,8 @@ export default function Register() {
   const bodySize = isNarrow || isShort ? 15 / fontScale : 16 / fontScale;
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
   const profileIconSize = Math.max(50, Math.min(80, width * 0.28));
+
+  const navigation = useNavigation();
 
   // * name fields states
   const [firstName, setFirstName] = useState("");
@@ -165,8 +169,30 @@ export default function Register() {
     }
   };
 
+  const panResponder = useRef(
+    PanResponder.create({
+      // Try to capture on touch start if a horizontal intent is detected quickly
+      onStartShouldSetPanResponder: (_, { dx, dy }) => Math.abs(dx) > 10 && Math.abs(dy) < 10,
+      onStartShouldSetPanResponderCapture: (_, { dx, dy }) => Math.abs(dx) > 10 && Math.abs(dy) < 10,
+      // Fallback: capture once the finger has moved horizontally enough
+      onMoveShouldSetPanResponder: (_, { dx, dy }) => Math.abs(dx) > 14 && Math.abs(dy) < 12,
+      onMoveShouldSetPanResponderCapture: (_, { dx, dy }) => Math.abs(dx) > 14 && Math.abs(dy) < 12,
+
+      onPanResponderTerminationRequest: () => true,
+      onPanResponderRelease: (_, { dx }) => {
+        // Log to Metro for debugging if needed
+        // console.log('Swipe dx:', dx);
+        if (dx < -50) {
+          navigation.navigate("Welcome");
+        }
+      },
+    })
+  ).current;
+
   return (
-    <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
+    <SafeAreaView
+      style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}
+    >
       <KeyboardAvoidingView
         style={tw`flex-1`}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -174,6 +200,7 @@ export default function Register() {
         <ScrollView
           contentContainerStyle={[tw`flex-grow`, { paddingVertical: 24 }]}
           keyboardShouldPersistTaps="handled"
+          {...panResponder.panHandlers}
         >
           {/* title with icon */}
           <View style={[tw` items-center `, { paddingHorizontal: 16 }]}>
