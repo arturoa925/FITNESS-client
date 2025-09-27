@@ -7,6 +7,7 @@ import { useFonts } from 'expo-font';
 import Loading from "./screens/Loading";
 import Welcome from "./screens/Welcome";
 import Register from "./screens/Register";
+import OutsideAuth from "./screens/OutsideAuth";
 
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -21,13 +22,6 @@ export default function App() {
     Manrope: require("./assets/fonts/Manrope-Regular.ttf"),
   });
     
-
-
-  // if (!fontsLoaded) {
-  //   return <AppLoading />;
-  // }
-
-
   const handleLoadingFinished = () => {
     Animated.timing(loaderOpacity, {
       toValue: 0,
@@ -43,6 +37,7 @@ export default function App() {
           <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Welcome" component={Welcome} />
             <Stack.Screen name="Register" component={Register} />
+            <Stack.Screen name="OutsideAuth" component={OutsideAuth} />
           </Stack.Navigator>
         </NavigationContainer>
       )}
