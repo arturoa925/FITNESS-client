@@ -404,6 +404,7 @@ export default function Welcome({ navigation }) {
                     style={tw`bg-white rounded-full w-12 h-12 items-center justify-center shadow`}
                     activeOpacity={0.8}
                     name="github"
+                    onPress={() => navigation.replace("Home")}
                   >
                     <Svg
                       width={iconSize}

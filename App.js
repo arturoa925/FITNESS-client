@@ -4,10 +4,15 @@ import { View, Animated } from "react-native";
 import tw from "twrnc";
 import { useFonts } from 'expo-font';
 // import AppLoading from "expo-app-loading";
-import Loading from "./screens/Loading";
-import Welcome from "./screens/Welcome";
-import Register from "./screens/Register";
-import OutsideAuth from "./screens/OutsideAuth";
+
+// * phase 0 screens
+import Loading from "./screens/Phase 0/Loading";
+import Welcome from "./screens/Phase 0/Welcome";
+import Register from "./screens/Phase 0/Register";
+import OutsideAuth from "./screens/Phase 0/OutsideAuth";
+
+// * phase 1 screens
+import Home from "./screens/Phase 1/Home";
 
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -38,6 +43,7 @@ export default function App() {
             <Stack.Screen name="Welcome" component={Welcome} />
             <Stack.Screen name="Register" component={Register} />
             <Stack.Screen name="OutsideAuth" component={OutsideAuth} />
+            <Stack.Screen name="Home" component={Home} />
           </Stack.Navigator>
         </NavigationContainer>
       )}

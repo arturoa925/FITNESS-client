@@ -23,9 +23,8 @@ export default function Loading({ onFinish, durationMs = 3000 }) {
 
   return (
     <View style={tw`flex-1 bg-white items-center justify-center`}>
-       
-         <Image
-        source={require("../assets/newfitlogo.png")} 
+       <Image
+        source={require("../../assets/newfitlogo.png")} 
         style={tw`w-40 h-40 mb-6`} // 96x96px with some bottom margin
         resizeMode="contain"
       />
