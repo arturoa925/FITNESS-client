@@ -242,6 +242,7 @@ export default function Home({ navigation }) {
                     fontFamily: "Joan",
                     fontWeight: "600",
                   }}
+                  onPress={() => navigation.navigate("Sessions")}
                 >
                   See Sweat
                 </Text>

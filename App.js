@@ -14,6 +14,9 @@ import OutsideAuth from "./screens/Phase 0/OutsideAuth";
 // * phase 1 screens
 import Home from "./screens/Phase 1/Home";
 
+// * phase 2 screens
+import Sessions from "./screens/Phase 2/Sessions";
+
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 const Stack = createNativeStackNavigator();
@@ -44,6 +47,7 @@ export default function App() {
             <Stack.Screen name="Register" component={Register} />
             <Stack.Screen name="OutsideAuth" component={OutsideAuth} />
             <Stack.Screen name="Home" component={Home} />
+            <Stack.Screen name="Sessions" component={Sessions} />
           </Stack.Navigator>
         </NavigationContainer>
       )}
