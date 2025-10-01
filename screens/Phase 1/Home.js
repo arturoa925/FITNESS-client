@@ -408,6 +408,65 @@ export default function Home({ navigation }) {
               >
                 Hybrid
               </Text>
+
+              <View
+                style={{
+                  backgroundColor: "#5492DA", // blue background
+                  paddingVertical: 20,
+                  paddingHorizontal: 16,
+                  marginTop: 180,
+                  alignItems: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontSize: 28,
+                    fontFamily: "Joan",
+                    fontWeight: "600",
+                  }}
+                >
+                  Daily Reps
+                </Text>
+              </View>
+
+              <Text style={{
+                    color: "#000000ff",
+                    fontSize: 28,
+                    fontFamily: "Joan",
+                    fontWeight: "600",
+                    textAlign: "center",
+                    marginTop: 80,
+                  }}>
+                For Movement and Momentum is the key
+              </Text>
+
+               <TouchableOpacity
+                  onPress={() => Alert.alert("Button pressed")}
+                  style={{
+                    backgroundColor: "#E6B82C",
+                    paddingVertical: 10,
+                    paddingHorizontal: 22,
+                    borderRadius: 20,
+                    minWidth: 110,
+                     marginTop: 100,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "#000",
+                      fontSize: 28,
+                      fontFamily: "Joan",
+                      fontWeight: "600",
+                     
+                    }}
+                    onPress={() => navigation.navigate("Sessions")}
+                  >
+                    Generate Workout
+                  </Text>
+                </TouchableOpacity>
             </View>
           </View>
         </ScrollView>
