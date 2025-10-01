@@ -35,8 +35,11 @@ export default function Home({ navigation }) {
   // progress for training plan (mock values for now)
   // ! replace with user data
   const weekCurrent = 8; // e.g., Week 3
-  const weekTotal = 12;  // e.g., out of 12
-  const progress = Math.max(0, Math.min(1, weekCurrent / Math.max(1, weekTotal)));
+  const weekTotal = 12; // e.g., out of 12
+  const progress = Math.max(
+    0,
+    Math.min(1, weekCurrent / Math.max(1, weekTotal))
+  );
   const completedWidth = progress * (maxWidth * 0.8); // matches marathon image & stats row width
 
   // animated progress (animate on view)
@@ -180,11 +183,7 @@ export default function Home({ navigation }) {
                 </View>
 
                 <View
-                  style={[
-                    tw`mt-4`,
-                    {borderRadius: 16,
-                    overflow: "hidden",}
-                  ]}
+                  style={[tw`mt-4`, { borderRadius: 16, overflow: "hidden" }]}
                 >
                   <Image
                     source={require("../../assets/marathon.jpeg")}
@@ -199,99 +198,216 @@ export default function Home({ navigation }) {
                 </View>
               </View>
 
-{/* statistics section */}
-            <View
-              style={[
-                tw`mt-8 mb-8`,
-                {
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  width: maxWidth * 0.8,
-                  alignSelf: "center",
-                },
-              ]}
-            >
-              {/* weeks need to be updated with user data */}
-              <Text
+              {/* statistics section */}
+              <View
                 style={[
-                  tw`text-3xl`,
-                  { color: "black", fontFamily: "Joan" },
+                  tw`mt-8 mb-8`,
+                  {
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    width: maxWidth * 0.8,
+                    alignSelf: "center",
+                  },
                 ]}
               >
-                Week #/#
-              </Text>
+                {/* weeks need to be updated with user data */}
+                <Text
+                  style={[tw`text-3xl`, { color: "black", fontFamily: "Joan" }]}
+                >
+                  Week #/#
+                </Text>
 
-              {/* see sweat button on the right */}
-              <TouchableOpacity
-                onPress={() => Alert.alert("Button pressed")}
+                {/* see sweat button on the right */}
+                <TouchableOpacity
+                  onPress={() => Alert.alert("Button pressed")}
+                  style={{
+                    backgroundColor: "#E6B82C",
+                    paddingVertical: 10,
+                    paddingHorizontal: 22,
+                    borderRadius: 20,
+                    minWidth: 110,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "#000",
+                      fontSize: 20,
+                      fontFamily: "Joan",
+                      fontWeight: "600",
+                    }}
+                    onPress={() => navigation.navigate("Sessions")}
+                  >
+                    See Sweat
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* gradient progress bar */}
+              <View
                 style={{
-                  backgroundColor: "#E6B82C",
-                  paddingVertical: 10,
-                  paddingHorizontal: 22,
-                  borderRadius: 20,
-                  minWidth: 110,
-                  alignItems: "center",
-                  justifyContent: "center",
+                  width: maxWidth * 0.8,
+                  alignSelf: "center",
+                  marginTop: 6,
                 }}
               >
-                <Text
-                  style={{
-                    color: "#000",
-                    fontSize: 20,
-                    fontFamily: "Joan",
-                    fontWeight: "600",
-                  }}
-                  onPress={() => navigation.navigate("Sessions")}
+                <View
+                  style={{ height: 16, borderRadius: 8, overflow: "hidden" }}
                 >
-                  See Sweat
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* gradient progress bar */}
-            <View style={{ width: maxWidth * 0.8, alignSelf: "center", marginTop: 6 }}>
-              <View style={{ height: 16, borderRadius: 8, overflow: "hidden" }}>
-                {/* faint full-length gradient (remaining/blurred portion) */}
-                <LinearGradient
-                  colors={["#87DAF0", "#355D73"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, opacity: 0.35 }}
-                />
-
-                {/* solid completed portion (clear section) */}
-                <Animated.View style={{ width: completedAnimatedWidth, height: "100%", overflow: "hidden" }}>
+                  {/* faint full-length gradient (remaining/blurred portion) */}
                   <LinearGradient
                     colors={["#87DAF0", "#355D73"]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
-                    style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      opacity: 0.35,
+                    }}
                   />
-                </Animated.View>
 
-                {/* moving shimmer overlay */}
-                <Animated.View
-                  pointerEvents="none"
+                  {/* solid completed portion (clear section) */}
+                  <Animated.View
+                    style={{
+                      width: completedAnimatedWidth,
+                      height: "100%",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <LinearGradient
+                      colors={["#87DAF0", "#355D73"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                      }}
+                    />
+                  </Animated.View>
+
+                  {/* moving shimmer overlay */}
+                  <Animated.View
+                    pointerEvents="none"
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      bottom: 0,
+                      width: 120,
+                      transform: [{ translateX: shimmerTranslate }],
+                      opacity: 0.6,
+                    }}
+                  >
+                    <LinearGradient
+                      colors={[
+                        "rgba(255,255,255,0)",
+                        "rgba(255,255,255,0.65)",
+                        "rgba(255,255,255,0)",
+                      ]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={{ flex: 1 }}
+                    />
+                  </Animated.View>
+                </View>
+              </View>
+
+              {/* New section: Start a New Training Program */}
+              <View
+                style={{
+                  backgroundColor: "#5492DA", // blue background
+                  paddingVertical: 20,
+                  paddingHorizontal: 16,
+                  marginTop: 180,
+                  alignItems: "center",
+                }}
+              >
+                <Text
                   style={{
-                    position: "absolute",
-                    top: 0,
-                    bottom: 0,
-                    width: 120,
-                    transform: [{ translateX: shimmerTranslate }],
-                    opacity: 0.6,
+                    color: "#fff",
+                    fontSize: 28,
+                    fontFamily: "Joan",
+                    fontWeight: "600",
                   }}
                 >
-                  <LinearGradient
-                    colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.65)", "rgba(255,255,255,0)"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={{ flex: 1 }}
-                  />
-                </Animated.View>
+                  Start a New Training Program
+                </Text>
               </View>
-            </View>
 
+              <Pressable
+                onPress={() => navigation.navigate("", { program: "Marathon" })}
+                style={({ pressed }) => [
+                  {
+                    transform: [{ scale: pressed ? 0.9 : 1 }], // scale down when pressed
+                    opacity: pressed ? 0.9 : 1, // slight fade
+                  },
+                ]}
+              >
+                <Image
+                  source={require("../../assets/marathon.jpeg")}
+                  style={{
+                    width: maxWidth * 0.8,
+                    height: maxWidth * 0.6,
+                    alignSelf: "center",
+                    borderRadius: 12,
+                    marginTop: 100,
+                  }}
+                  resizeMode="cover"
+                />
+              </Pressable>
+              <Text
+                style={{
+                  color: "#060000ff",
+                  fontSize: 28,
+                  fontFamily: "Joan",
+                  fontWeight: "600",
+                  textAlign: "center",
+                  marginTop: 60,
+                }}
+              >
+                Marathon
+              </Text>
+
+              <Pressable
+                onPress={() => navigation.navigate("", { program: "Hybrid" })}
+                style={({ pressed }) => [
+                  {
+                    transform: [{ scale: pressed ? 0.9 : 1 }], // scale down when pressed
+                    opacity: pressed ? 0.9 : 1, // slight fade
+                  },
+                ]}
+              >
+                <Image
+                  source={require("../../assets/hybrid.jpeg")}
+                  style={{
+                    width: maxWidth * 0.8,
+                    height: maxWidth * 0.6,
+                    alignSelf: "center",
+                    borderRadius: 12,
+                    marginTop: 100,
+                  }}
+                  resizeMode="cover"
+                />
+              </Pressable>
+              <Text
+                style={{
+                  color: "#060000ff",
+                  fontSize: 28,
+                  fontFamily: "Joan",
+                  fontWeight: "600",
+                  textAlign: "center",
+                  marginTop: 60,
+                }}
+              >
+                Hybrid
+              </Text>
             </View>
           </View>
         </ScrollView>
