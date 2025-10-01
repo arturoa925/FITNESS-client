@@ -279,6 +279,30 @@ return (
                 ))}
               </View>
 
+  <TouchableOpacity
+                onPress={() => Alert.alert("Button pressed")}
+                style={{
+                  backgroundColor: "#E6B82C",
+                  paddingVertical: 10,
+                  paddingHorizontal: 22,
+                  borderRadius: 20,
+                  minWidth: 110,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#000",
+                    fontSize: 20,
+                    fontFamily: "Joan",
+                    fontWeight: "600",
+                  }}
+                  onPress={() => navigation.navigate("")}
+                >
+                  Begin Today's Session
+                </Text>
+              </TouchableOpacity>
 
 
 
