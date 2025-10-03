@@ -13,6 +13,7 @@ import {
   Image,
   Animated,
   Easing,
+  Modal,
 } from "react-native";
 import tw from "twrnc";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -21,6 +22,10 @@ import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
+import { Calendar } from "react-native-calendars";
+import { Picker } from "@react-native-picker/picker";
+import { TouchableWithoutFeedback } from "react-native";
+import { FlatList } from "react-native";
 
 export default function Home({ navigation }) {
   const { width, height, fontScale } = useWindowDimensions();
@@ -77,6 +82,101 @@ export default function Home({ navigation }) {
     loop.start();
     return () => loop.stop();
   }, [maxWidth]);
+
+  //calendar component
+  // ----- Calendar & Food Log state -----
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [unitModalOpen, setUnitModalOpen] = useState(false);
+
+  // Hard-coded workout completions for display (YYYY-MM-DD)
+  const completedWorkouts = {
+    "2025-10-01": [{ name: "5K Run" }],
+    "2025-10-02": [{ name: "Upper Body Lift" }],
+    "2025-10-04": [{ name: "Mobility + Core" }],
+    "2025-10-06": [{ name: "Long Run 8mi" }],
+  };
+
+  // Foods keyed by date
+  const [foodsByDate, setFoodsByDate] = useState({
+    "2025-10-02": [{ name: "Greek Yogurt", amount: "170", unit: "g" }],
+  });
+
+  const [foodModalOpen, setFoodModalOpen] = useState(false);
+  const [foodName, setFoodName] = useState("");
+  const [foodAmount, setFoodAmount] = useState("");
+  const [foodUnit, setFoodUnit] = useState("g");
+
+  const openFoodModal = (dateStr) => {
+    setSelectedDate(dateStr);
+    setFoodModalOpen(true);
+  };
+
+  const addFood = () => {
+    if (!selectedDate) return;
+    if (!foodName.trim() || !foodAmount.trim() || !foodUnit.trim()) {
+      Alert.alert("Please fill in food name, amount, and unit.");
+      return;
+    }
+    setFoodsByDate((prev) => {
+      const existing = prev[selectedDate] || [];
+      return {
+        ...prev,
+        [selectedDate]: [
+          ...existing,
+          {
+            name: foodName.trim(),
+            amount: foodAmount.trim(),
+            unit: foodUnit.trim(),
+          },
+        ],
+      };
+    });
+    setFoodName("");
+    setFoodAmount("");
+    setFoodUnit("g");
+    setFoodModalOpen(false);
+  };
+
+  // unit picker wheel helpers
+  const openUnitPicker = () => {
+    // close food sheet first so the unit modal isn't hidden behind it
+    setFoodModalOpen(false);
+    requestAnimationFrame(() => setUnitModalOpen(true));
+  };
+
+  const finishUnitPick = (val) => {
+    setFoodUnit(val);
+    setUnitModalOpen(false);
+    // re-open the food sheet after the unit wheel closes
+    requestAnimationFrame(() => setFoodModalOpen(true));
+  };
+
+  // Build markedDates for multi-dot calendar (workouts + foods + selected)
+  const markedDates = (() => {
+    const marks = {};
+    Object.keys(completedWorkouts).forEach((d) => {
+      marks[d] = {
+        ...(marks[d] || {}),
+        marked: true,
+        dots: [{ color: "#355D73" }], // workout
+      };
+    });
+    Object.keys(foodsByDate).forEach((d) => {
+      marks[d] = {
+        ...(marks[d] || {}),
+        marked: true,
+        dots: [...(marks[d]?.dots || []), { color: "#E6B82C" }], // food
+      };
+    });
+    if (selectedDate) {
+      marks[selectedDate] = {
+        ...marks[selectedDate],
+        selected: true,
+        selectedColor: "#87DAF0",
+      };
+    }
+    return marks;
+  })();
 
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
@@ -322,7 +422,7 @@ export default function Home({ navigation }) {
               {/* New section: Start a New Training Program */}
               <View
                 style={{
-                  backgroundColor: "#5492DA", // blue background
+                  backgroundColor: "#5492DA", 
                   paddingVertical: 20,
                   paddingHorizontal: 16,
                   marginTop: 180,
@@ -345,8 +445,8 @@ export default function Home({ navigation }) {
                 onPress={() => navigation.navigate("", { program: "Marathon" })}
                 style={({ pressed }) => [
                   {
-                    transform: [{ scale: pressed ? 0.9 : 1 }], // scale down when pressed
-                    opacity: pressed ? 0.9 : 1, // slight fade
+                    transform: [{ scale: pressed ? 0.9 : 1 }], 
+                    opacity: pressed ? 0.9 : 1, 
                   },
                 ]}
               >
@@ -379,8 +479,8 @@ export default function Home({ navigation }) {
                 onPress={() => navigation.navigate("", { program: "Hybrid" })}
                 style={({ pressed }) => [
                   {
-                    transform: [{ scale: pressed ? 0.9 : 1 }], // scale down when pressed
-                    opacity: pressed ? 0.9 : 1, // slight fade
+                    transform: [{ scale: pressed ? 0.9 : 1 }], 
+                    opacity: pressed ? 0.9 : 1, 
                   },
                 ]}
               >
@@ -411,7 +511,7 @@ export default function Home({ navigation }) {
 
               <View
                 style={{
-                  backgroundColor: "#5492DA", // blue background
+                  backgroundColor: "#5492DA", 
                   paddingVertical: 20,
                   paddingHorizontal: 16,
                   marginTop: 180,
@@ -430,47 +530,552 @@ export default function Home({ navigation }) {
                 </Text>
               </View>
 
-              <Text style={{
-                    color: "#000000ff",
-                    fontSize: 28,
-                    fontFamily: "Joan",
-                    fontWeight: "600",
-                    textAlign: "center",
-                    marginTop: 80,
-                  }}>
+              <Text
+                style={{
+                  color: "#000000ff",
+                  fontSize: 28,
+                  fontFamily: "Joan",
+                  fontWeight: "600",
+                  textAlign: "center",
+                  marginTop: 80,
+                }}
+              >
                 For Movement and Momentum is the key
               </Text>
 
-               <TouchableOpacity
-                  onPress={() => Alert.alert("Button pressed")}
+              <TouchableOpacity
+                onPress={() => Alert.alert("Button pressed")}
+                style={{
+                  backgroundColor: "#E6B82C",
+                  paddingVertical: 10,
+                  paddingHorizontal: 22,
+                  borderRadius: 20,
+                  minWidth: 110,
+                  marginTop: 100,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text
                   style={{
-                    backgroundColor: "#E6B82C",
-                    paddingVertical: 10,
-                    paddingHorizontal: 22,
-                    borderRadius: 20,
-                    minWidth: 110,
-                     marginTop: 100,
+                    color: "#000",
+                    fontSize: 28,
+                    fontFamily: "Joan",
+                    fontWeight: "600",
+                  }}
+                  onPress={() => navigation.navigate("Sessions")}
+                >
+                  Generate Workout
+                </Text>
+              </TouchableOpacity>
+
+              <View
+                style={{
+                  backgroundColor: "#5492DA", 
+                  paddingVertical: 20,
+                  paddingHorizontal: 16,
+                  marginTop: 360,
+                  alignItems: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontSize: 28,
+                    fontFamily: "Joan",
+                    fontWeight: "600",
+                  }}
+                >
+                  View Your Consistency
+                </Text>
+              </View>
+
+              {/* Calendar & Day Log */}
+              <View
+                style={{
+                  width: maxWidth * 0.95,
+                  alignSelf: "center",
+                  backgroundColor: "#FFFFFF",
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  marginTop: 16,
+                  padding: 12,
+                  shadowColor: "#000",
+                  shadowOpacity: 0.1,
+                  shadowRadius: 6,
+                  shadowOffset: { width: 0, height: 2 },
+                  elevation: 2,
+                }}
+              >
+                <Calendar
+                  style={{ borderRadius: 12 }}
+                  theme={{
+                    todayTextColor: "#5492DA",
+                    arrowColor: "#355D73",
+                    textDayFontFamily: "Joan",
+                    textMonthFontFamily: "Joan",
+                    textDayHeaderFontFamily: "Joan",
+                    monthTextColor: "#060000",
+                  }}
+                  markingType="multi-dot"
+                  markedDates={markedDates}
+                  onDayPress={(day) => setSelectedDate(day.dateString)}
+                />
+
+                {/* Legend */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: 16,
+                    marginTop: 8,
                     alignItems: "center",
-                    justifyContent: "center",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 5,
+                        backgroundColor: "#355D73",
+                      }}
+                    />
+                    <Text style={{ fontFamily: "Joan", color: "#060000" }}>
+                      Workout (blue-gray)
+                    </Text>
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 5,
+                        backgroundColor: "#E6B82C",
+                      }}
+                    />
+                    <Text style={{ fontFamily: "Joan", color: "#060000" }}>
+                      Food (yellow)
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Day actions */}
+                <View
+                  style={{
+                    marginTop: 12,
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
                   }}
                 >
                   <Text
                     style={{
-                      color: "#000",
-                      fontSize: 28,
                       fontFamily: "Joan",
-                      fontWeight: "600",
-                     
+                      fontSize: 20,
+                      color: "#060000",
                     }}
-                    onPress={() => navigation.navigate("Sessions")}
                   >
-                    Generate Workout
+                    {selectedDate
+                      ? `Selected: ${selectedDate}`
+                      : "Select a day"}
                   </Text>
-                </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (!selectedDate) {
+                        Alert.alert("Select a date first");
+                        return;
+                      }
+                      openFoodModal(selectedDate);
+                    }}
+                    style={{
+                      backgroundColor: "#E6B82C",
+                      paddingVertical: 10,
+                      paddingHorizontal: 16,
+                      borderRadius: 12,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#000",
+                        fontSize: 16,
+                        fontFamily: "Joan",
+                        fontWeight: "600",
+                      }}
+                    >
+                      Add Food
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Day details */}
+                <View style={{ marginTop: 16 }}>
+                  <Text
+                    style={{
+                      fontFamily: "Joan",
+                      fontSize: 22,
+                      color: "#060000",
+                      marginBottom: 8,
+                    }}
+                  >
+                    Day Summary
+                  </Text>
+                  {/* Workouts */}
+                  <Text
+                    style={{
+                      fontFamily: "Joan",
+                      fontSize: 18,
+                      color: "#355D73",
+                    }}
+                  >
+                    Workouts
+                  </Text>
+                  {selectedDate &&
+                  completedWorkouts[selectedDate]?.length > 0 ? (
+                    completedWorkouts[selectedDate].map((w, idx) => (
+                      <Text
+                        key={`w-${idx}`}
+                        style={{
+                          fontFamily: "Joan",
+                          fontSize: 16,
+                          color: "#060000",
+                        }}
+                      >
+                        • {w.name}
+                      </Text>
+                    ))
+                  ) : (
+                    <Text
+                      style={{
+                        fontFamily: "Joan",
+                        fontSize: 16,
+                        color: "#777",
+                      }}
+                    >
+                      No workouts logged.
+                    </Text>
+                  )}
+                  {/* Foods */}
+                 
+                  <Text
+                    style={{
+                      fontFamily: "Joan",
+                      fontSize: 18,
+                      color: "#355D73",
+                      marginTop: 10,
+                    }}
+                  >
+                    Foods
+                  </Text>
+                  {selectedDate && foodsByDate[selectedDate]?.length > 0 ? (
+                    <FlatList
+                      data={foodsByDate[selectedDate]}
+                      keyExtractor={(_, idx) => `f-${idx}`}
+                      renderItem={({ item }) => (
+                        <Text
+                          style={{
+                            fontFamily: "Joan",
+                            fontSize: 16,
+                            color: "#060000",
+                          }}
+                        >
+                          • {item.name} — {item.amount}
+                          {item.unit}
+                        </Text>
+                      )}
+                      scrollEnabled={false}
+                    />
+                  ) : (
+                    <Text
+                      style={{
+                        fontFamily: "Joan",
+                        fontSize: 16,
+                        color: "#777",
+                      }}
+                    >
+                      No foods logged. Tap “Add Food”.
+                    </Text>
+                  )}
+                  
+                </View>
+              </View>
+
+              {/* Add Food Modal */}
+              <Modal
+                animationType="slide"
+                transparent
+                visible={foodModalOpen}
+                onRequestClose={() => setFoodModalOpen(false)}
+              >
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: "rgba(0,0,0,0.35)",
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <View
+                    style={{
+                      backgroundColor: "#FFF",
+                      borderTopLeftRadius: 16,
+                      borderTopRightRadius: 16,
+                      padding: 16,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: "Joan",
+                        fontSize: 22,
+                        color: "#060000",
+                        textAlign: "center",
+                        marginBottom: 12,
+                      }}
+                    >
+                      Add Food — {selectedDate || ""}
+                    </Text>
+
+                    <TextInput
+                      placeholder="Food name (e.g., Chicken Breast)"
+                      value={foodName}
+                      onChangeText={setFoodName}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: "#ddd",
+                        padding: 12,
+                        borderRadius: 10,
+                        marginBottom: 10,
+                        fontFamily: "Joan",
+                      }}
+                    />
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        gap: 10,
+                        alignItems: "center",
+                      }}
+                    >
+                      {/* Compact numeric amount */}
+                      <TextInput
+                        placeholder="Amt"
+                        keyboardType="number-pad"
+                        inputMode="numeric"
+                        maxLength={5}
+                        value={foodAmount}
+                        onChangeText={setFoodAmount}
+                        style={{
+                          width: 90, 
+                          height: 44, 
+                          borderWidth: 1,
+                          borderColor: "#ddd",
+                          borderRadius: 10,
+                          paddingHorizontal: 12,
+                          fontFamily: "Joan",
+                          fontSize: 16,
+                          textAlign: "center", 
+                        }}
+                      />
+
+                      {/* Unit selector */}
+                      {Platform.OS === "android" ? (
+                        // Android: compact dropdown
+                        <View
+                          style={{
+                            flex: 1,
+                            height: 44,
+                            borderWidth: 1,
+                            borderColor: "#ddd",
+                            borderRadius: 10,
+                            justifyContent: "center",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <Picker
+                            selectedValue={foodUnit}
+                            onValueChange={(val) => setFoodUnit(val)}
+                            mode="dropdown"
+                            style={{ height: 44, width: "100%" }}
+                            dropdownIconColor="#060000"
+                          >
+                            <Picker.Item label="grams (g)" value="g" />
+                            <Picker.Item label="ounces (oz)" value="oz" />
+                            <Picker.Item label="milliliters (ml)" value="ml" />
+                            <Picker.Item label="cups (cup)" value="cup" />
+                            <Picker.Item
+                              label="tablespoons (tbsp)"
+                              value="tbsp"
+                            />
+                            <Picker.Item label="teaspoons (tsp)" value="tsp" />
+                          </Picker>
+                        </View>
+                      ) : (
+                        // iOS: show only the selected unit; open wheel in a separate modal
+                        <TouchableOpacity
+                          onPress={openUnitPicker}
+                          style={{
+                            flex: 1,
+                            height: 44,
+                            borderWidth: 1,
+                            borderColor: "#ddd",
+                            borderRadius: 10,
+                            paddingHorizontal: 12,
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontFamily: "Joan",
+                              fontSize: 16,
+                              color: "#060000",
+                            }}
+                          >
+                            {(() => {
+                              switch (foodUnit) {
+                                case "g":
+                                  return "grams (g)";
+                                case "oz":
+                                  return "ounces (oz)";
+                                case "ml":
+                                  return "milliliters (ml)";
+                                case "cup":
+                                  return "cups (cup)";
+                                case "tbsp":
+                                  return "tablespoons (tbsp)";
+                                case "tsp":
+                                  return "teaspoons (tsp)";
+                                default:
+                                  return foodUnit;
+                              }
+                            })()}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <View
+                      style={{
+                        marginTop: 16,
+                        flexDirection: "row",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        gap: 12,
+                      }}
+                    >
+                      <TouchableOpacity
+                        onPress={() => setFoodModalOpen(false)}
+                        style={{
+                          paddingVertical: 12,
+                          paddingHorizontal: 18,
+                          borderRadius: 12,
+                          backgroundColor: "#A4A4A4",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: "Joan",
+                            color: "#000",
+                            fontSize: 16,
+                          }}
+                        >
+                          Cancel
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={addFood}
+                        style={{
+                          paddingVertical: 12,
+                          paddingHorizontal: 18,
+                          borderRadius: 12,
+                          backgroundColor: "#E6B82C",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: "Joan",
+                            color: "#000",
+                            fontSize: 16,
+                            fontWeight: "600",
+                          }}
+                        >
+                          Save
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </Modal>
+
+              {/* iOS Unit Picker (simple + reliable) */}
             </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <Modal
+        visible={unitModalOpen}
+        transparent
+        animationType="slide"
+        presentationStyle="overFullScreen"
+        onRequestClose={() => setUnitModalOpen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "flex-end",
+            backgroundColor: "rgba(0,0,0,0.35)",
+          }}
+        >
+          {/* Backdrop to close on tap */}
+          <Pressable
+            onPress={() => setUnitModalOpen(false)}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+          />
+          {/* Bottom sheet (NO touchables here so the wheel gets gestures) */}
+          <View
+            style={{
+              backgroundColor: "#FFF",
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              paddingTop: 8,
+              paddingBottom: 12,
+            }}
+          >
+            <Picker
+              selectedValue={foodUnit}
+              onValueChange={(val) => finishUnitPick(val)}
+              style={{ height: 216, width: "100%" }} 
+              itemStyle={{
+                fontFamily: "Joan",
+                fontSize: 18,
+                color: "#060000",
+              }}
+            >
+              <Picker.Item label="grams (g)" value="g" />
+              <Picker.Item label="ounces (oz)" value="oz" />
+              <Picker.Item label="milliliters (ml)" value="ml" />
+              <Picker.Item label="cups (cup)" value="cup" />
+              <Picker.Item label="tablespoons (tbsp)" value="tbsp" />
+              <Picker.Item label="teaspoons (tsp)" value="tsp" />
+            </Picker>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
