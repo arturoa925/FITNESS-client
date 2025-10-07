@@ -88,6 +88,27 @@ export default function Home({ navigation }) {
   const [selectedDate, setSelectedDate] = useState(null);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
 
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+  const handleAccountSettings = () => {
+    setProfileMenuOpen(false);
+    navigation.navigate("Profile"); // change to "AccountSettings" if you add that route
+  };
+
+  const handleLogout = async () => {
+    setProfileMenuOpen(false);
+    // Optional: clear any secure tokens if you store them
+    try {
+      await SecureStore.deleteItemAsync("authToken");
+      await SecureStore.deleteItemAsync("refreshToken");
+    } catch (e) {
+      // ignore if keys don't exist
+    }
+    Alert.alert("Logged out", "You have been logged out.");
+    // TODO: Navigate to your auth screen if applicable, e.g.:
+    // navigation.reset({ index: 0, routes: [{ name: "Auth" }] });
+  };
+
   // Hard-coded workout completions for display (YYYY-MM-DD)
   const completedWorkouts = {
     "2025-10-01": [{ name: "5K Run" }],
@@ -200,7 +221,8 @@ export default function Home({ navigation }) {
               {/* Profile picture placeholder (top right) */}
               <View style={{ alignItems: "flex-end" }}>
                 <TouchableOpacity
-                  onPress={() => navigation.navigate("Profile")}
+                  onPress={() => setProfileMenuOpen(true)}
+                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
                 >
                   <View
                     style={{
@@ -433,8 +455,9 @@ export default function Home({ navigation }) {
                   style={{
                     color: "#fff",
                     fontSize: 28,
-                    fontFamily: "Joan",
-                    fontWeight: "600",
+                    fontFamily: "Manrope",
+                    fontWeight: "400",
+                    textAlign: "center"
                   }}
                 >
                   Start a New Training Program
@@ -522,7 +545,7 @@ export default function Home({ navigation }) {
                   style={{
                     color: "#fff",
                     fontSize: 28,
-                    fontFamily: "Joan",
+                    fontFamily: "Manrope",
                     fontWeight: "600",
                   }}
                 >
@@ -563,7 +586,7 @@ export default function Home({ navigation }) {
                     fontFamily: "Joan",
                     fontWeight: "600",
                   }}
-                  onPress={() => navigation.navigate("Sessions")}
+                  onPress={() => navigation.navigate("DailyGrind")}
                 >
                   Generate Workout
                 </Text>
@@ -582,7 +605,7 @@ export default function Home({ navigation }) {
                   style={{
                     color: "#fff",
                     fontSize: 28,
-                    fontFamily: "Joan",
+                    fontFamily: "Manrope",
                     fontWeight: "600",
                   }}
                 >
@@ -1021,6 +1044,68 @@ export default function Home({ navigation }) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      {/* Profile menu modal */}
+      <Modal
+        visible={profileMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProfileMenuOpen(false)}
+      >
+        <Pressable
+          onPress={() => setProfileMenuOpen(false)}
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.15)" }}
+        >
+          {/* Empty Pressable to catch backdrop taps */}
+        </Pressable>
+
+        {/* Anchored menu container */}
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: "absolute",
+            top: 70,
+            right: 12,
+            alignItems: "flex-end",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: "#fff",
+              borderRadius: 12,
+              paddingVertical: 4,
+              minWidth: 160,
+              shadowColor: "#000",
+              shadowOpacity: 0.15,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 4 },
+              elevation: 4,
+              borderWidth: 1,
+              borderColor: "#eee",
+            }}
+          >
+            <TouchableOpacity
+              onPress={handleAccountSettings}
+              style={{ paddingVertical: 12, paddingHorizontal: 14 }}
+            >
+              <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}>
+                Account Settings
+              </Text>
+            </TouchableOpacity>
+
+            <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
+
+            <TouchableOpacity
+              onPress={handleLogout}
+              style={{ paddingVertical: 12, paddingHorizontal: 14 }}
+            >
+              <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#B00020" }}>
+                Log out
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={unitModalOpen}
         transparent
@@ -1073,6 +1158,10 @@ export default function Home({ navigation }) {
               <Picker.Item label="tablespoons (tbsp)" value="tbsp" />
               <Picker.Item label="teaspoons (tsp)" value="tsp" />
             </Picker>
+
+
+
+           
           </View>
         </View>
       </Modal>

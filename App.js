@@ -28,6 +28,7 @@ export default function App() {
   const [fontsLoaded] = useFonts({
     Joan: require("./assets/fonts/Joan-Regular.ttf"),
     Manrope: require("./assets/fonts/Manrope-Regular.ttf"),
+    Inter: require("./assets/fonts/Inter_18pt-Regular.ttf")
   });
     
   const handleLoadingFinished = () => {
