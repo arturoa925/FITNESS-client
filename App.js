@@ -16,6 +16,7 @@ import Home from "./screens/Phase 1/Home";
 
 // * phase 2 screens
 import Sessions from "./screens/Phase 2/Sessions";
+import DailyGrind from "./screens/Phase 2/DailyGrind";
 
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -49,6 +50,7 @@ export default function App() {
             <Stack.Screen name="OutsideAuth" component={OutsideAuth} />
             <Stack.Screen name="Home" component={Home} />
             <Stack.Screen name="Sessions" component={Sessions} />
+            <Stack.Screen name="DailyGrind" component={DailyGrind} />
           </Stack.Navigator>
         </NavigationContainer>
       )}

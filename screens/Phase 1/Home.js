@@ -444,7 +444,7 @@ export default function Home({ navigation }) {
               {/* New section: Start a New Training Program */}
               <View
                 style={{
-                  backgroundColor: "#5492DA", 
+                  backgroundColor: "#5492DA",
                   paddingVertical: 20,
                   paddingHorizontal: 16,
                   marginTop: 180,
@@ -457,7 +457,7 @@ export default function Home({ navigation }) {
                     fontSize: 28,
                     fontFamily: "Manrope",
                     fontWeight: "400",
-                    textAlign: "center"
+                    textAlign: "center",
                   }}
                 >
                   Start a New Training Program
@@ -468,8 +468,8 @@ export default function Home({ navigation }) {
                 onPress={() => navigation.navigate("", { program: "Marathon" })}
                 style={({ pressed }) => [
                   {
-                    transform: [{ scale: pressed ? 0.9 : 1 }], 
-                    opacity: pressed ? 0.9 : 1, 
+                    transform: [{ scale: pressed ? 0.9 : 1 }],
+                    opacity: pressed ? 0.9 : 1,
                   },
                 ]}
               >
@@ -502,8 +502,8 @@ export default function Home({ navigation }) {
                 onPress={() => navigation.navigate("", { program: "Hybrid" })}
                 style={({ pressed }) => [
                   {
-                    transform: [{ scale: pressed ? 0.9 : 1 }], 
-                    opacity: pressed ? 0.9 : 1, 
+                    transform: [{ scale: pressed ? 0.9 : 1 }],
+                    opacity: pressed ? 0.9 : 1,
                   },
                 ]}
               >
@@ -534,7 +534,7 @@ export default function Home({ navigation }) {
 
               <View
                 style={{
-                  backgroundColor: "#5492DA", 
+                  backgroundColor: "#5492DA",
                   paddingVertical: 20,
                   paddingHorizontal: 16,
                   marginTop: 180,
@@ -594,7 +594,7 @@ export default function Home({ navigation }) {
 
               <View
                 style={{
-                  backgroundColor: "#5492DA", 
+                  backgroundColor: "#5492DA",
                   paddingVertical: 20,
                   paddingHorizontal: 16,
                   marginTop: 360,
@@ -791,7 +791,7 @@ export default function Home({ navigation }) {
                     </Text>
                   )}
                   {/* Foods */}
-                 
+
                   <Text
                     style={{
                       fontFamily: "Joan",
@@ -831,7 +831,6 @@ export default function Home({ navigation }) {
                       No foods logged. Tap “Add Food”.
                     </Text>
                   )}
-                  
                 </View>
               </View>
 
@@ -898,15 +897,15 @@ export default function Home({ navigation }) {
                         value={foodAmount}
                         onChangeText={setFoodAmount}
                         style={{
-                          width: 90, 
-                          height: 44, 
+                          width: 90,
+                          height: 44,
                           borderWidth: 1,
                           borderColor: "#ddd",
                           borderRadius: 10,
                           paddingHorizontal: 12,
                           fontFamily: "Joan",
                           fontSize: 16,
-                          textAlign: "center", 
+                          textAlign: "center",
                         }}
                       />
 
@@ -1087,18 +1086,28 @@ export default function Home({ navigation }) {
               onPress={handleAccountSettings}
               style={{ paddingVertical: 12, paddingHorizontal: 14 }}
             >
-              <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}>
+              <Text
+                style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}
+              >
                 Account Settings
               </Text>
             </TouchableOpacity>
 
-            <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
+            <View
+              style={{
+                height: 1,
+                backgroundColor: "#eee",
+                marginHorizontal: 8,
+              }}
+            />
 
             <TouchableOpacity
               onPress={handleLogout}
               style={{ paddingVertical: 12, paddingHorizontal: 14 }}
             >
-              <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#B00020" }}>
+              <Text
+                style={{ fontFamily: "Joan", fontSize: 16, color: "#B00020" }}
+              >
                 Log out
               </Text>
             </TouchableOpacity>
@@ -1144,7 +1153,7 @@ export default function Home({ navigation }) {
             <Picker
               selectedValue={foodUnit}
               onValueChange={(val) => finishUnitPick(val)}
-              style={{ height: 216, width: "100%" }} 
+              style={{ height: 216, width: "100%" }}
               itemStyle={{
                 fontFamily: "Joan",
                 fontSize: 18,
@@ -1158,10 +1167,6 @@ export default function Home({ navigation }) {
               <Picker.Item label="tablespoons (tbsp)" value="tbsp" />
               <Picker.Item label="teaspoons (tsp)" value="tsp" />
             </Picker>
-
-
-
-           
           </View>
         </View>
       </Modal>

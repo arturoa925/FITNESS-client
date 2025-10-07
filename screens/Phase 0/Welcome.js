@@ -382,6 +382,7 @@ export default function Welcome({ navigation }) {
                     activeOpacity={0.8}
                     name="google"
                     onPress={() => {
+                       console.log("redirect to Outside Auth");
                       navigation.replace("OutsideAuth", {
                         // mock params you’d normally get from provider/backend
                         email: "demo@user.com",
@@ -389,6 +390,7 @@ export default function Welcome({ navigation }) {
                         photo: null,
                       });
                     }}
+                   
                   >
                     <Svg
                       width={iconSize}
@@ -404,7 +406,9 @@ export default function Welcome({ navigation }) {
                     style={tw`bg-white rounded-full w-12 h-12 items-center justify-center shadow`}
                     activeOpacity={0.8}
                     name="github"
-                    onPress={() => navigation.replace("Home")}
+                    onPress={() => {
+                      console.log("redirect to Home");
+                      navigation.replace("Home")}}
                   >
                     <Svg
                       width={iconSize}
