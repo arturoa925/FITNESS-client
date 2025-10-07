@@ -14,6 +14,7 @@ import {
   Image,
   Animated,
   Easing,
+  PanResponder,
 } from "react-native";
 import tw from "twrnc";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -170,6 +171,43 @@ export default function DailyGrind({ navigation }) {
     },
   ]);
 
+  // --- Swipe right to go Home ---
+  const swipeHandledRef = useRef(false);
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_evt, gesture) => {
+        const { dx, dy, x0 } = gesture;
+        const startedAtEdge = x0 <= 24; // require touch to begin within 24px of left edge
+        const horizontal = Math.abs(dx) > Math.abs(dy);
+        return startedAtEdge && horizontal && Math.abs(dx) > 10;
+      },
+      onPanResponderGrant: (_evt, gesture) => {
+        swipeHandledRef.current = false;
+        // No-op, kept for clarity; could add visual feedback here if desired
+      },
+      onPanResponderMove: () => {},
+      onPanResponderRelease: (_evt, gesture) => {
+        const { dx, vx, dy, x0 } = gesture;
+        const startedAtEdge = x0 <= 32;
+        const movedRightEnough = dx > 50;     // distance
+        const horizontalEnough = Math.abs(dx) > Math.abs(dy);
+        const fastEnough = vx > 0.1;          // velocity
+        const isRightSwipe = startedAtEdge && movedRightEnough && horizontalEnough && fastEnough;
+        if (isRightSwipe && !swipeHandledRef.current) {
+          swipeHandledRef.current = true;
+          try {
+            navigation.navigate("Home");
+          } finally {
+            setTimeout(() => {
+              swipeHandledRef.current = false;
+            }, 400);
+          }
+        }
+      },
+      onPanResponderTerminationRequest: () => true,
+    })
+  ).current;
+
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
       <KeyboardAvoidingView
@@ -181,7 +219,10 @@ export default function DailyGrind({ navigation }) {
           keyboardShouldPersistTaps="handled"
         >
           {/* outer centered container with max width */}
-          <View style={[tw`flex-1 items-center`, { paddingHorizontal: 16 }]}>
+          <View
+            {...panResponder.panHandlers}
+            style={[tw`flex-1 items-center`, { paddingHorizontal: 16 }]}
+          >
             <View
               style={{
                 width: maxWidth,

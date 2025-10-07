@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { View, Animated } from "react-native";
 import tw from "twrnc";
 import { useFonts } from 'expo-font';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 // import AppLoading from "expo-app-loading";
 
 // * phase 0 screens
@@ -41,25 +42,27 @@ export default function App() {
   };
 
   return (
-    <View style={tw`flex-1 bg-white`}>
-      {!showLoader && (
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Welcome" component={Welcome} />
-            <Stack.Screen name="Register" component={Register} />
-            <Stack.Screen name="OutsideAuth" component={OutsideAuth} />
-            <Stack.Screen name="Home" component={Home} />
-            <Stack.Screen name="Sessions" component={Sessions} />
-            <Stack.Screen name="DailyGrind" component={DailyGrind} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      )}
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={tw`flex-1 bg-white`}>
+        {!showLoader && (
+          <NavigationContainer>
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="Welcome" component={Welcome} />
+              <Stack.Screen name="Register" component={Register} />
+              <Stack.Screen name="OutsideAuth" component={OutsideAuth} />
+              <Stack.Screen name="Home" component={Home} />
+              <Stack.Screen name="Sessions" component={Sessions} />
+              <Stack.Screen name="DailyGrind" component={DailyGrind} />
+            </Stack.Navigator>
+          </NavigationContainer>
+        )}
 
-      {showLoader && (
-        <Animated.View style={[tw`absolute inset-0`, { opacity: loaderOpacity, zIndex: 50 }]}>
-          <Loading onFinish={handleLoadingFinished} />
-        </Animated.View>
-      )}
-    </View>
+        {showLoader && (
+          <Animated.View style={[tw`absolute inset-0`, { opacity: loaderOpacity, zIndex: 50 }]}>
+            <Loading onFinish={handleLoadingFinished} />
+          </Animated.View>
+        )}
+      </View>
+    </GestureHandlerRootView>
   );
 }
