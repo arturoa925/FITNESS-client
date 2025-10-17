@@ -298,7 +298,7 @@ return (
                     fontFamily: "Joan",
                     fontWeight: "600",
                   }}
-                  onPress={() => navigation.navigate("")}
+                  onPress={() => navigation.navigate("TodaysSession")}
                 >
                   Begin Today's Session
                 </Text>

@@ -19,6 +19,10 @@ import Home from "./screens/Phase 1/Home";
 import Sessions from "./screens/Phase 2/Sessions";
 import DailyGrind from "./screens/Phase 2/DailyGrind";
 
+// * phase 3 screens
+import TodaysSession from "./screens/Phase 3/TodaysSession";
+import ProgramDetails from "./screens/Phase 3/ProgramDetails";
+
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 const Stack = createNativeStackNavigator();
@@ -56,6 +60,8 @@ export default function App() {
               <Stack.Screen name="Home" component={Home} />
               <Stack.Screen name="Sessions" component={Sessions} />
               <Stack.Screen name="DailyGrind" component={DailyGrind} />
+              <Stack.Screen name="TodaysSession" component={TodaysSession} />
+              <Stack.Screen name="ProgramDetails" component={ProgramDetails} />
             </Stack.Navigator>
           </NavigationContainer>
         )}

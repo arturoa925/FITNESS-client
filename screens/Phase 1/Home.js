@@ -179,7 +179,7 @@ export default function Home({ navigation }) {
 
                 {/* see sweat button on the right */}
                 <TouchableOpacity
-                  onPress={() => Alert.alert("Button pressed")}
+                   onPress={() => navigation.navigate("Sessions")}
                   style={{
                     backgroundColor: "#E6B82C",
                     paddingVertical: 10,
@@ -231,7 +231,7 @@ export default function Home({ navigation }) {
               </View>
               {/* marathon */}
               <Pressable
-                onPress={() => navigation.navigate("", { program: "Marathon" })}
+                onPress={() => navigation.navigate("ProgramDetails", { program: "Marathon" })}
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],
@@ -266,7 +266,7 @@ export default function Home({ navigation }) {
 
               {/* hybrid */}
               <Pressable
-                onPress={() => navigation.navigate("", { program: "Hybrid" })}
+                onPress={() => navigation.navigate("ProgramDetails")}
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],
@@ -334,7 +334,7 @@ export default function Home({ navigation }) {
               </Text>
 
               <TouchableOpacity
-                onPress={() => Alert.alert("Button pressed")}
+                 onPress={() => navigation.navigate("DailyGrind")}
                 style={{
                   backgroundColor: "#E6B82C",
                   paddingVertical: 10,
@@ -353,7 +353,7 @@ export default function Home({ navigation }) {
                     fontFamily: "Joan",
                     fontWeight: "600",
                   }}
-                  onPress={() => navigation.navigate("DailyGrind")}
+                 
                 >
                   Generate Workout
                 </Text>
