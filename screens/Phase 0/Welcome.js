@@ -92,11 +92,13 @@ export default function Welcome({ navigation }) {
     if (authBusy) return;
     try {
       setAuthBusy(true);
+      console.log("[handleBiometricLogin] starting biometric auth");
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: `Authenticate with ${biometricLabel}`,
         cancelLabel: "Cancel",
         disableDeviceFallback: true,
       });
+      console.log("[handleBiometricLogin] result:", result);
       if (!result.success) return;
       const loginEmail = biometricEmail || email;
       if (!loginEmail) {
@@ -118,6 +120,7 @@ export default function Welcome({ navigation }) {
   // * toggle handler for face id
   const toggleBiometrics = async () => {
     if (authBusy) return;
+    console.log("[toggleBiometrics] pressed - useBiometrics:", useBiometrics, "supported:", biometricSupported);
     if (!useBiometrics) {
       if (!biometricSupported) return;
       try {
@@ -127,15 +130,18 @@ export default function Welcome({ navigation }) {
           cancelLabel: "Cancel",
           disableDeviceFallback: true,
         });
+        console.log("[toggleBiometrics] authenticateAsync result:", result);
         if (result.success) {
           setUseBiometrics(true);
           await SecureStore.setItemAsync("use_biometrics", "true");
         }
         // do nothing on cancel/failure
       } finally {
+        console.log("[toggleBiometrics] done");
         setAuthBusy(false);
       }
     } else {
+      console.log("[toggleBiometrics] disabling biometrics");
       setUseBiometrics(false);
       await SecureStore.setItemAsync("use_biometrics", "false");
     }
@@ -145,23 +151,86 @@ export default function Welcome({ navigation }) {
   const handleLogin = async () => {
     if (authBusy) return;
     try {
+      setAuthBusy(true);
+
+      // Optional biometric gate if enabled
       if (useBiometrics) {
-        setAuthBusy(true);
         const res = await LocalAuthentication.authenticateAsync({
           promptMessage: `Authenticate with ${biometricLabel}`,
           cancelLabel: "Cancel",
           disableDeviceFallback: true,
         });
-        if (!res.success) return; // user canceled or failed
+        if (!res.success) {
+          return; // user canceled or failed
+        }
       }
 
-      // TODO: call your backend here with email/password
-      // const { data } = await api.post('/auth/login', { email, password })
-      // save token, navigate, etc.
+      // Basic validation
+      if (!email || !password) {
+        Alert.alert("Missing info", "Please enter both email and password.");
+        return;
+      }
+
+      // Choose the correct localhost for the simulator/device
+      // iOS Simulator: localhost works. Android Emulator: use 10.0.2.2
+      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const loginUrl = `${baseURL}/users/login`;
+
+      const response = await fetch(loginUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      // Handle non-2xx
+      if (!response.ok) {
+        let message = "Login failed.";
+        try {
+          const errBody = await response.json();
+          message = errBody?.message || message;
+        } catch (_) {
+          try { message = await response.text(); } catch (_) {}
+        }
+        Alert.alert("Login error", message || "Please try again.");
+        return;
+      }
+
+      // Parse success payload
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (_) {}
+
+      // Common token field names (adjust to your backend contract)
+      const accessToken = data.token || data.accessToken || data.jwt || null;
+      const refreshToken = data.refreshToken || null;
+
+      // Persist tokens (if returned)
+      if (accessToken) await SecureStore.setItemAsync("authToken", accessToken);
+      if (refreshToken) await SecureStore.setItemAsync("refreshToken", refreshToken);
+
+      // Persist last email and biometric email preference
+      await SecureStore.setItemAsync("lastLoginEmail", email);
+      if (useBiometrics) {
+        await SecureStore.setItemAsync("biometricEmail", email);
+        await SecureStore.setItemAsync("use_biometrics", "true");
+      }
+
+      // Navigate to the app (Home)
+      navigation.replace("Home");
+    } catch (e) {
+      console.log("/users/login error:", e);
+      Alert.alert("Network error", "Could not reach the server. Is it running on port 3004?");
     } finally {
       setAuthBusy(false);
     }
   };
+
+  
+
 
   useFocusEffect(
     useCallback(() => {

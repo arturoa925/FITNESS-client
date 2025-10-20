@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { View, Text, TouchableOpacity, Modal, Pressable, Alert } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
-export default function ProfileAvatarMenu({ navigation, style }) {
+export default function ProfileAvatarMenu({ navigation, style, onLogout }) {
   const [open, setOpen] = useState(false);
 
   const handleAccountSettings = () => {
@@ -11,15 +11,21 @@ export default function ProfileAvatarMenu({ navigation, style }) {
     navigation.navigate("Profile"); // or "AccountSettings"
   };
 
-  const handleLogout = async () => {
-    setOpen(false);
-    try {
-      await SecureStore.deleteItemAsync("authToken");
-      await SecureStore.deleteItemAsync("refreshToken");
-    } catch {}
-    Alert.alert("Logged out", "You have been logged out.");
-    // navigation.reset({ index: 0, routes: [{ name: "Auth" }] });
-  };
+const handleLogout = async () => {
+  setOpen(false);
+  try {
+    if (typeof onLogout === "function") {
+      // Delegate to parent (Home) so it can call backend /users/logout and navigate
+      return onLogout();
+    }
+    // Fallback: clear locally and navigate
+    await SecureStore.deleteItemAsync("authToken");
+    await SecureStore.deleteItemAsync("refreshToken");
+    navigation?.replace?.("Welcome");
+  } catch (e) {
+    console.log("[ProfilePic] Logout error:", e);
+  }
+};
 
   return (
     <View style={style}>

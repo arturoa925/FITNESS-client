@@ -28,9 +28,10 @@ import { TouchableWithoutFeedback } from "react-native";
 import { FlatList } from "react-native";
 
 // * components
-import ProfilePic from "../../components/Home/ProfilePic";
+import ProfileAvatarMenu from "../../components/Home/ProfilePic";
 import ProgressBar from "../../components/Home/CurrentWeekBar";
 import CalendarFoodLog from "../../components/Home/Calendar";
+
 
 export default function Home({ navigation }) {
   const { width, height, fontScale } = useWindowDimensions();
@@ -41,6 +42,38 @@ export default function Home({ navigation }) {
   const h2Size = isNarrow || isShort ? 18 / fontScale : 20 / fontScale;
   const bodySize = isNarrow || isShort ? 15 / fontScale : 16 / fontScale;
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
+
+  // * log out user
+  const handleLogout = async () => {
+    try {
+      // Get the stored token (optional)
+      const token = await SecureStore.getItemAsync("authToken");
+
+      const baseURL =
+        Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const logoutUrl = `${baseURL}/users/logout`;
+
+      await fetch(logoutUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+      });
+
+      // Clear all auth-related data
+      await SecureStore.deleteItemAsync("authToken");
+      await SecureStore.deleteItemAsync("refreshToken");
+      await SecureStore.deleteItemAsync("biometricEmail");
+      await SecureStore.deleteItemAsync("use_biometrics");
+
+      // Navigate back to Welcome
+      navigation.replace("Welcome");
+    } catch (error) {
+      console.error("Logout error:", error);
+      Alert.alert("Error", "Unable to log out. Please try again.");
+    }
+  };
 
   // progress for training plan (mock values for now)
   // ! replace with user data
@@ -81,7 +114,7 @@ export default function Home({ navigation }) {
             >
               {/* Profile picture placeholder (top right) */}
               <View style={{ alignItems: "flex-end" }}>
-                <ProfilePic navigation={navigation} />
+                <ProfileAvatarMenu navigation={navigation} onLogout={handleLogout} />
               </View>
 
               {/* Title below, centered */}
