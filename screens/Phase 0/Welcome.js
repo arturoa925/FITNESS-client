@@ -1,5 +1,5 @@
 // client/screens/Welcome.js
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   KeyboardAvoidingView,
   ScrollView,
+  LogBox,
 } from "react-native";
 import tw from "twrnc";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -20,6 +21,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 
 export default function Welcome({ navigation }) {
+
+  LogBox.ignoreLogs([
+  'Sending `onAnimatedValueUpdate` with no listeners registered.',
+]);
+
   // * register route
   const handleRegisterPress = () => {
     navigation.navigate("Register");
@@ -99,19 +105,11 @@ export default function Welcome({ navigation }) {
         disableDeviceFallback: true,
       });
       console.log("[handleBiometricLogin] result:", result);
-      if (!result.success) return;
-      const loginEmail = biometricEmail || email;
-      if (!loginEmail) {
-        Alert.alert(
-          "Missing email",
-          "No email found for biometric login. Please enter your email."
-        );
-        return;
-      }
-      // TODO: call your backend with loginEmail (and a stored refresh token if you use token-based auth)
-      // Example:
-      // const { data } = await api.post('/auth/biometric-login', { email: loginEmail })
-      // save token, navigate, etc.
+      if (!result.success) return; // user canceled/failed
+
+      // If you want to require email/password too, keep the validation in handleLogin.
+      // We call handleLogin but tell it to skip another biometric prompt.
+      await handleLogin({ skipBiometric: true });
     } finally {
       setAuthBusy(false);
     }
@@ -148,13 +146,13 @@ export default function Welcome({ navigation }) {
   };
 
   // *login handler
-  const handleLogin = async () => {
+  const handleLogin = async ({ skipBiometric = false } = {}) => {
     if (authBusy) return;
     try {
       setAuthBusy(true);
 
-      // Optional biometric gate if enabled
-      if (useBiometrics) {
+      // Optional biometric gate if enabled (unless already completed)
+      if (useBiometrics && !skipBiometric) {
         const res = await LocalAuthentication.authenticateAsync({
           promptMessage: `Authenticate with ${biometricLabel}`,
           cancelLabel: "Cancel",
@@ -229,22 +227,26 @@ export default function Welcome({ navigation }) {
     }
   };
 
-  
-
+  // Disable auto Face ID prompt on screen focus to avoid being stuck at launch.
+  // Users can still tap the Face ID button or the checkbox to authenticate.
+  const autoPromptOnLaunch = useRef(false); // set to true later if you want auto-prompt behavior
 
   useFocusEffect(
     useCallback(() => {
-      let didPrompt = false;
+      if (!autoPromptOnLaunch.current) return; // no auto prompt by default
+      let cancelled = false;
       (async () => {
-        if (useBiometrics && biometricSupported && !authBusy && !didPrompt) {
-          didPrompt = true;
+        if (cancelled) return;
+        if (useBiometrics && biometricSupported && !authBusy && email) {
           try {
             await handleBiometricLogin();
           } catch {}
         }
       })();
-      return () => {};
-    }, [useBiometrics, biometricSupported, authBusy, biometricEmail, email])
+      return () => {
+        cancelled = true;
+      };
+    }, [useBiometrics, biometricSupported, authBusy, email])
   );
 
   return (

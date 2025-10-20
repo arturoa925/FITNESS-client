@@ -64,9 +64,7 @@ export default function Home({ navigation }) {
       // Clear all auth-related data
       await SecureStore.deleteItemAsync("authToken");
       await SecureStore.deleteItemAsync("refreshToken");
-      await SecureStore.deleteItemAsync("biometricEmail");
-      await SecureStore.deleteItemAsync("use_biometrics");
-
+      
       // Navigate back to Welcome
       navigation.replace("Welcome");
     } catch (error) {
