@@ -11,6 +11,7 @@ import Loading from "./screens/Phase 0/Loading";
 import Welcome from "./screens/Phase 0/Welcome";
 import Register from "./screens/Phase 0/Register";
 import OutsideAuth from "./screens/Phase 0/OutsideAuth";
+import GoogleAuth from "./screens/Phase 0/GoogleAuth";
 
 // * phase 1 screens
 import Home from "./screens/Phase 1/Home";
@@ -57,6 +58,11 @@ export default function App() {
               <Stack.Screen name="Welcome" component={Welcome} />
               <Stack.Screen name="Register" component={Register} />
               <Stack.Screen name="OutsideAuth" component={OutsideAuth} />
+              <Stack.Screen
+                name="GoogleAuth"
+                component={GoogleAuth}
+                options={{ headerTitle: "Sign in with Google" }}
+              />
               <Stack.Screen name="Home" component={Home} />
               <Stack.Screen name="Sessions" component={Sessions} />
               <Stack.Screen name="DailyGrind" component={DailyGrind} />

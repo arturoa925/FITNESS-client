@@ -19,12 +19,13 @@ import * as SecureStore from "expo-secure-store";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 
 export default function Welcome({ navigation }) {
-
   LogBox.ignoreLogs([
-  'Sending `onAnimatedValueUpdate` with no listeners registered.',
-]);
+    "Sending `onAnimatedValueUpdate` with no listeners registered.",
+  ]);
 
   // * register route
   const handleRegisterPress = () => {
@@ -118,7 +119,12 @@ export default function Welcome({ navigation }) {
   // * toggle handler for face id
   const toggleBiometrics = async () => {
     if (authBusy) return;
-    console.log("[toggleBiometrics] pressed - useBiometrics:", useBiometrics, "supported:", biometricSupported);
+    console.log(
+      "[toggleBiometrics] pressed - useBiometrics:",
+      useBiometrics,
+      "supported:",
+      biometricSupported
+    );
     if (!useBiometrics) {
       if (!biometricSupported) return;
       try {
@@ -171,7 +177,10 @@ export default function Welcome({ navigation }) {
 
       // Choose the correct localhost for the simulator/device
       // iOS Simulator: localhost works. Android Emulator: use 10.0.2.2
-      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const baseURL =
+        Platform.OS === "android"
+          ? "http://10.0.2.2:3004"
+          : "http://localhost:3004";
       const loginUrl = `${baseURL}/users/login`;
 
       const response = await fetch(loginUrl, {
@@ -190,7 +199,9 @@ export default function Welcome({ navigation }) {
           const errBody = await response.json();
           message = errBody?.message || message;
         } catch (_) {
-          try { message = await response.text(); } catch (_) {}
+          try {
+            message = await response.text();
+          } catch (_) {}
         }
         Alert.alert("Login error", message || "Please try again.");
         return;
@@ -208,7 +219,8 @@ export default function Welcome({ navigation }) {
 
       // Persist tokens (if returned)
       if (accessToken) await SecureStore.setItemAsync("authToken", accessToken);
-      if (refreshToken) await SecureStore.setItemAsync("refreshToken", refreshToken);
+      if (refreshToken)
+        await SecureStore.setItemAsync("refreshToken", refreshToken);
 
       // Persist last email and biometric email preference
       await SecureStore.setItemAsync("lastLoginEmail", email);
@@ -221,7 +233,10 @@ export default function Welcome({ navigation }) {
       navigation.replace("Home");
     } catch (e) {
       console.log("/users/login error:", e);
-      Alert.alert("Network error", "Could not reach the server. Is it running on port 3004?");
+      Alert.alert(
+        "Network error",
+        "Could not reach the server. Is it running on port 3004?"
+      );
     } finally {
       setAuthBusy(false);
     }
@@ -248,6 +263,37 @@ export default function Welcome({ navigation }) {
       };
     }, [useBiometrics, biometricSupported, authBusy, email])
   );
+
+  // Google system-auth handler
+  const handleGoogleSignIn = async () => {
+    try {
+      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const authUrl = `${baseURL}/auth/google?mode=minimal&state=mobile`;
+      const redirectUri = Linking.createURL("oauth-complete"); // e.g., fitnessapp://oauth-complete
+
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+      if (result.type === "success" && result.url) {
+        // Parse fragment after '#': token, email, name, photo (adjust to your backend payload)
+        const hash = result.url.split("#")[1] || "";
+        const params = new URLSearchParams(hash);
+        const token = params.get("token");
+        const emailParam = params.get("email");
+        const nameParam = params.get("name");
+        const photo = params.get("photo");
+
+        navigation.replace("OutsideAuth", {
+          token,
+          email: emailParam,
+          name: nameParam,
+          photo,
+          provider: "google",
+        });
+      }
+    } catch (e) {
+      console.log("[Welcome] Google sign-in error:", e);
+      Alert.alert("Google sign-in failed", e?.message || "Please try again.");
+    }
+  };
 
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
@@ -452,16 +498,7 @@ export default function Welcome({ navigation }) {
                     style={tw`bg-white rounded-full w-12 h-12 items-center justify-center shadow`}
                     activeOpacity={0.8}
                     name="google"
-                    onPress={() => {
-                       console.log("redirect to Outside Auth");
-                      navigation.replace("OutsideAuth", {
-                        // mock params you’d normally get from provider/backend
-                        email: "demo@user.com",
-                        name: "Demo User",
-                        photo: null,
-                      });
-                    }}
-                   
+                    onPress={handleGoogleSignIn}
                   >
                     <Svg
                       width={iconSize}
@@ -477,9 +514,6 @@ export default function Welcome({ navigation }) {
                     style={tw`bg-white rounded-full w-12 h-12 items-center justify-center shadow`}
                     activeOpacity={0.8}
                     name="github"
-                    onPress={() => {
-                      console.log("redirect to Home");
-                      navigation.replace("Home")}}
                   >
                     <Svg
                       width={iconSize}
