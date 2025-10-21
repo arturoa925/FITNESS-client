@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Image,
+  Linking,
 } from "react-native";
 import { PanResponder } from "react-native";
 import tw from "twrnc";
@@ -48,6 +49,8 @@ export default function Register() {
   const [biometricLabel, setBiometricLabel] = useState("Face ID");
   const [useBiometrics, setUseBiometrics] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
+  const [submitBusy, setSubmitBusy] = useState(false);
+  const pickerBusyRef = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -107,8 +110,9 @@ export default function Register() {
     } catch {}
   };
 
-  // * create account handler
   const handleCreateAccount = async () => {
+    if (submitBusy) return;
+
     // basic validation
     if (!firstName.trim() || !lastName.trim()) {
       Alert.alert("Missing info", "Please enter your first and last name.");
@@ -122,50 +126,164 @@ export default function Register() {
       Alert.alert("Password too short", "Use at least 6 characters.");
       return;
     }
-  
+
     try {
-      // TODO: Replace this with your real API call
-      // Example:
-      // const res = await fetch(`${API_BASE}/auth/register`, {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ firstName, lastName, email, password, photo }),
-      // });
-      // if (!res.ok) throw new Error("Signup failed");
-      // const data = await res.json();
-  
-      // Persist biometric preference alongside the newly created account
-      await persistBiometricAfterSignup(email);
-  
-      Alert.alert("Welcome!", "Your account has been created.");
-      // TODO: navigate to your app's home screen here if using a navigator
-      // navigation.navigate("Home");
+      setSubmitBusy(true);
+
+      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const url = `${baseURL}/users/register`;
+
+      // Build multipart form data to support optional avatar upload
+      const form = new FormData();
+      form.append("firstName", firstName.trim());
+      form.append("lastName", lastName.trim());
+      form.append("email", email.trim().toLowerCase());
+      form.append("password", password);
+
+      if (photo) {
+        // best-effort mime type detection from extension
+        const nameFromUri = photo.split("/").pop() || `avatar-${Date.now()}.jpg`;
+        const ext = (nameFromUri.split(".").pop() || "jpg").toLowerCase();
+        const mimeByExt = {
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          png: "image/png",
+          webp: "image/webp",
+          heic: "image/heic",
+          heif: "image/heif",
+        };
+        const mime = mimeByExt[ext] || "image/jpeg";
+        form.append("avatar", { uri: photo, name: nameFromUri, type: mime });
+      }
+
+      const res = await fetch(url, {
+        method: "POST",
+        // Do NOT set Content-Type for multipart; let fetch/XHR set the boundary
+        headers: { Accept: "application/json" },
+        body: form,
+      });
+
+      if (!res.ok) {
+        let message = "Sign up failed.";
+        try {
+          const err = await res.json();
+          message = err?.message || message;
+        } catch (_) {
+          try { message = await res.text(); } catch (_) {}
+        }
+        Alert.alert("Error", message);
+        return;
+      }
+
+      let data = {};
+      try { data = await res.json(); } catch (_) {}
+      console.log("[Register] /users/register response:", data);
+
+      // If backend returns a token, persist it so the user is signed in
+      const token = data.token || data.accessToken || data.jwt;
+      if (token) {
+        await SecureStore.setItemAsync("authToken", token);
+      }
+
+      // Persist Face ID preference & email if user opted in
+      try {
+        if (useBiometrics) {
+          await SecureStore.setItemAsync("useBiometrics", "true");
+          await SecureStore.setItemAsync("biometricEmail", email.trim().toLowerCase());
+        }
+      } catch {}
+
+      const goNext = () => {
+        if (token) {
+          if (navigation?.replace) {
+            navigation.replace("Home");
+          } else if (navigation?.reset) {
+            navigation.reset({ index: 0, routes: [{ name: "Home" }] });
+          } else if (navigation?.navigate) {
+            navigation.navigate("Home");
+          }
+        } else {
+          if (navigation?.replace) {
+            navigation.replace("Welcome");
+          } else if (navigation?.reset) {
+            navigation.reset({ index: 0, routes: [{ name: "Welcome" }] });
+          } else if (navigation?.navigate) {
+            navigation.navigate("Welcome");
+          }
+        }
+      };
+
+      // Show an alert and navigate on confirmation to avoid race conditions with the native Alert
+      Alert.alert(
+        "Welcome!",
+        "Your account has been created.",
+        [
+          { text: "OK", onPress: goNext },
+        ],
+        { cancelable: true }
+      );
     } catch (e) {
-      Alert.alert("Sign up failed", e?.message || "Please try again.");
+      console.log("/users/register error:", e);
+      Alert.alert("Network error", "Could not reach the server on port 3004.");
+    } finally {
+      setSubmitBusy(false);
     }
   };
 
   // Photo picker helper
   const pickImage = async () => {
+    if (pickerBusyRef.current) return;
+    pickerBusyRef.current = true;
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission needed", "Please allow photo library access to upload a profile photo.");
+      // Check current permission first
+      const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+      let status = current.status;
+
+      if (status !== "granted" && status !== "limited") {
+        const requested = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        status = requested.status;
+        // Give iOS a breath so the next modal (picker) doesn't instantly auto-cancel
+        if (Platform.OS === "ios" && (status === "granted" || status === "limited")) {
+          await new Promise((r) => setTimeout(r, 150));
+        }
+      }
+
+      if (status !== "granted" && status !== "limited") {
+        Alert.alert(
+          "Permission needed",
+          "Please allow photo library access to upload a profile photo.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings?.() },
+          ]
+        );
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      // Use the new API when available; otherwise, omit mediaTypes to use the default (Images)
+      const hasNewEnum = !!ImagePicker.MediaType && !!ImagePicker.MediaType.Images;
+      const options = {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.9,
-      });
+        selectionLimit: 1,
+      };
+      if (hasNewEnum) {
+        options.mediaTypes = [ImagePicker.MediaType.Images];
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync(options);
+
+      console.log("[Register] ImagePicker result:", result);
 
       if (!result.canceled && result.assets?.length) {
         setPhoto(result.assets[0].uri);
       }
     } catch (e) {
-      Alert.alert("Error", "Could not open photo library.");
+      console.log("[Register] ImagePicker error:", e);
+      Alert.alert("Error", e?.message || "Could not open photo library.");
+    } finally {
+      pickerBusyRef.current = false;
     }
   };
 
@@ -435,12 +553,13 @@ export default function Register() {
                   {
                     width: maxWidth,
                     alignSelf: "center",
-                    backgroundColor: pressed ? "#5a9cc6" : "#8CBFDF",
+                    backgroundColor: submitBusy ? "#a3c7de" : pressed ? "#5a9cc6" : "#8CBFDF",
                   },
                 ]}
                 onPress={handleCreateAccount}
                 accessibilityRole="button"
                 accessibilityLabel="Create Account"
+                disabled={submitBusy}
               >
                 <Text
                   style={[
