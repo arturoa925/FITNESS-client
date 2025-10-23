@@ -21,6 +21,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
+import { useUser } from "../../components/UserContext";
+import { section, json, info, warn, error, success } from "../../components/logger";
 
 export default function Welcome({ navigation }) {
   LogBox.ignoreLogs([
@@ -31,6 +33,9 @@ export default function Welcome({ navigation }) {
   const handleRegisterPress = () => {
     navigation.navigate("Register");
   };
+
+  // * user context
+  const { setUser } = useUser();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,15 +57,21 @@ export default function Welcome({ navigation }) {
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
 
   // * face id setup
-  // Load saved preference + stored email on mount
+  // Load saved preference + stored email on mount (prefer lastLoginEmail, else biometricEmail)
   useEffect(() => {
     (async () => {
-      const saved = await SecureStore.getItemAsync("use_biometrics");
-      if (saved === "true") setUseBiometrics(true);
-      const savedEmail = await SecureStore.getItemAsync("biometricEmail");
-      if (savedEmail) {
-        setBiometricEmail(savedEmail);
-        if (!email) setEmail(savedEmail);
+      try {
+        const savedPref = await SecureStore.getItemAsync("use_biometrics");
+        if (savedPref === "true") setUseBiometrics(true);
+
+        const lastEmail = await SecureStore.getItemAsync("lastLoginEmail");
+        const bioEmail = await SecureStore.getItemAsync("biometricEmail");
+        if (bioEmail) setBiometricEmail(bioEmail);
+
+        const prefill = lastEmail || bioEmail || "";
+        if (prefill && !email) setEmail(prefill);
+      } catch (e) {
+        warn("Welcome: preload email error", e);
       }
     })();
   }, []);
@@ -77,12 +88,8 @@ export default function Welcome({ navigation }) {
           LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION
         );
 
-        console.log("Biometric debug:", {
-          hasHardware,
-          isEnrolled,
-          types,
-          hasFace,
-        });
+        section("Biometric check");
+        json("Biometric", { hasHardware, isEnrolled, types, hasFace });
 
         setBiometricSupported(hasHardware && isEnrolled);
         setBiometricLabel(
@@ -99,18 +106,53 @@ export default function Welcome({ navigation }) {
     if (authBusy) return;
     try {
       setAuthBusy(true);
-      console.log("[handleBiometricLogin] starting biometric auth");
+      section("Biometric auth: start");
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: `Authenticate with ${biometricLabel}`,
         cancelLabel: "Cancel",
         disableDeviceFallback: true,
       });
-      console.log("[handleBiometricLogin] result:", result);
+      json("Biometric auth: result", result);
       if (!result.success) return; // user canceled/failed
 
-      // If you want to require email/password too, keep the validation in handleLogin.
-      // We call handleLogin but tell it to skip another biometric prompt.
-      await handleLogin({ skipBiometric: true });
+      // If user provided a password, reuse the regular login (skip second biometric)
+      if (password) {
+        await handleLogin({ skipBiometric: true });
+        return;
+      }
+
+      // Quick-login path: no password typed → use saved token to fetch /users/me
+      const token = await SecureStore.getItemAsync("authToken");
+      if (!token) {
+        Alert.alert("Sign in required", "Please sign in once with your password to enable quick Face ID login.");
+        return;
+      }
+
+      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const me = await fetch(`${baseURL}/users/me`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!me.ok) {
+        warn("Saved token rejected; please log in manually.", me.status);
+        Alert.alert("Session expired", "Please enter your password and sign in again.");
+        return;
+      }
+      const profile = await me.json();
+      json("/users/me", profile);
+
+      const normalized = {
+        id: profile.id || profile.user?.id,
+        email: profile.email || profile.user?.email || email,
+        firstName: profile.firstName || profile.user?.firstName,
+        lastName: profile.lastName || profile.user?.lastName,
+        profilePicture: profile.profilePicture || profile.user?.profilePicture,
+        provider: profile.provider || profile.user?.provider || "local",
+        raw: profile,
+      };
+      json("Biometric quick-login user", normalized);
+      setUser(normalized);
+
+      navigation.replace("Home");
+    } catch (e) {
+      error("Biometric quick login error", e);
     } finally {
       setAuthBusy(false);
     }
@@ -119,12 +161,8 @@ export default function Welcome({ navigation }) {
   // * toggle handler for face id
   const toggleBiometrics = async () => {
     if (authBusy) return;
-    console.log(
-      "[toggleBiometrics] pressed - useBiometrics:",
-      useBiometrics,
-      "supported:",
-      biometricSupported
-    );
+    section("Toggle biometrics pressed");
+    json("State", { useBiometrics, biometricSupported });
     if (!useBiometrics) {
       if (!biometricSupported) return;
       try {
@@ -134,18 +172,18 @@ export default function Welcome({ navigation }) {
           cancelLabel: "Cancel",
           disableDeviceFallback: true,
         });
-        console.log("[toggleBiometrics] authenticateAsync result:", result);
+        json("Toggle biometrics: auth result", result);
         if (result.success) {
           setUseBiometrics(true);
           await SecureStore.setItemAsync("use_biometrics", "true");
         }
         // do nothing on cancel/failure
       } finally {
-        console.log("[toggleBiometrics] done");
+        info("Toggle biometrics: done");
         setAuthBusy(false);
       }
     } else {
-      console.log("[toggleBiometrics] disabling biometrics");
+      warn("Toggle biometrics: disabling");
       setUseBiometrics(false);
       await SecureStore.setItemAsync("use_biometrics", "false");
     }
@@ -164,9 +202,7 @@ export default function Welcome({ navigation }) {
           cancelLabel: "Cancel",
           disableDeviceFallback: true,
         });
-        if (!res.success) {
-          return; // user canceled or failed
-        }
+        if (!res.success) return; // user canceled or failed
       }
 
       // Basic validation
@@ -175,14 +211,14 @@ export default function Welcome({ navigation }) {
         return;
       }
 
-      // Choose the correct localhost for the simulator/device
-      // iOS Simulator: localhost works. Android Emulator: use 10.0.2.2
+      // Base URL (iOS sim uses localhost; Android emu uses 10.0.2.2)
       const baseURL =
         Platform.OS === "android"
           ? "http://10.0.2.2:3004"
           : "http://localhost:3004";
       const loginUrl = `${baseURL}/users/login`;
 
+      // Login request
       const response = await fetch(loginUrl, {
         method: "POST",
         headers: {
@@ -192,7 +228,6 @@ export default function Welcome({ navigation }) {
         body: JSON.stringify({ email, password }),
       });
 
-      // Handle non-2xx
       if (!response.ok) {
         let message = "Login failed.";
         try {
@@ -212,27 +247,72 @@ export default function Welcome({ navigation }) {
       try {
         data = await response.json();
       } catch (_) {}
+      section("Login response");
+      json("/users/login", data);
 
-      // Common token field names (adjust to your backend contract)
+      // Tokens & user id extraction (support several shapes)
       const accessToken = data.token || data.accessToken || data.jwt || null;
       const refreshToken = data.refreshToken || null;
+      const userId =
+        (data.user && (data.user.id || data.user.userId)) ||
+        data.id ||
+        data.userId ||
+        null;
+      json("Login extracted", { accessToken, refreshToken, userId });
 
-      // Persist tokens (if returned)
-      if (accessToken) await SecureStore.setItemAsync("authToken", accessToken);
+      // Persist tokens
+      if (accessToken)
+        await SecureStore.setItemAsync("authToken", String(accessToken));
       if (refreshToken)
-        await SecureStore.setItemAsync("refreshToken", refreshToken);
+        await SecureStore.setItemAsync("refreshToken", String(refreshToken));
 
-      // Persist last email and biometric email preference
+      // Persist last email and biometric preference
       await SecureStore.setItemAsync("lastLoginEmail", email);
       if (useBiometrics) {
         await SecureStore.setItemAsync("biometricEmail", email);
         await SecureStore.setItemAsync("use_biometrics", "true");
       }
 
-      // Navigate to the app (Home)
+      // Fetch full user profile (preferred: explicit id route you provided)
+      try {
+        if (accessToken && userId) {
+          info("Fetching profile", `${baseURL}/users/${userId}`);
+          const profileRes = await fetch(`${baseURL}/users/${userId}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (profileRes.ok) {
+            const profile = await profileRes.json();
+            json("Profile", profile);
+            // Normalize common fields; keep original object too
+            const normalized = {
+              id: profile.id || userId,
+              email: profile.email || email,
+              firstName: profile.firstName || profile.given_name || null,
+              lastName: profile.lastName || profile.family_name || null,
+              profilePicture: profile.profilePicture || profile.picture || null,
+              provider: profile.provider || "local",
+              raw: profile,
+            };
+            json("Normalized user", normalized);
+            setUser(normalized);
+          } else {
+            warn("Profile fetch failed", profileRes.status, await profileRes.text());
+            // If profile fetch fails, at least store minimal info so UI can render
+            setUser({ id: userId, email, provider: "local" });
+          }
+        } else {
+          // No id/token in response; still set minimal context
+          setUser({ email, provider: "local" });
+        }
+      } catch (e) {
+        error("Profile fetch error", e);
+        setUser({ email, provider: "local" });
+      }
+
+      // Navigate to Home once context is populated
       navigation.replace("Home");
     } catch (e) {
-      console.log("/users/login error:", e);
+      error("/users/login error", e);
       Alert.alert(
         "Network error",
         "Could not reach the server. Is it running on port 3004?"
@@ -267,11 +347,20 @@ export default function Welcome({ navigation }) {
   // Google system-auth handler
   const handleGoogleSignIn = async () => {
     try {
-      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const baseURL =
+        Platform.OS === "android"
+          ? "http://10.0.2.2:3004"
+          : "http://localhost:3004";
       const authUrl = `${baseURL}/auth/google?mode=minimal&state=mobile`;
       const redirectUri = Linking.createURL("oauth-complete"); // e.g., fitnessapp://oauth-complete
+      section("Google auth session");
+      json("Start", { authUrl, redirectUri });
 
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrl,
+        redirectUri
+      );
+      json("Google result", result);
       if (result.type === "success" && result.url) {
         // Parse fragment after '#': token, email, name, photo (adjust to your backend payload)
         const hash = result.url.split("#")[1] || "";
@@ -280,6 +369,7 @@ export default function Welcome({ navigation }) {
         const emailParam = params.get("email");
         const nameParam = params.get("name");
         const photo = params.get("photo");
+        json("Google parsed", { token, email: emailParam, name: nameParam, photo });
 
         navigation.replace("OutsideAuth", {
           token,

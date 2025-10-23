@@ -1,10 +1,11 @@
 
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, Modal, Pressable, Alert } from "react-native";
+import { View, Text, TouchableOpacity, Modal, Pressable, Alert, Image } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
-export default function ProfileAvatarMenu({ navigation, style, onLogout }) {
+export default function ProfileAvatarMenu({ navigation, style, onLogout, profilePicture }) {
   const [open, setOpen] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   const handleAccountSettings = () => {
     setOpen(false);
@@ -31,14 +32,18 @@ const handleLogout = async () => {
     <View style={style}>
       {/* Avatar */}
       <TouchableOpacity onPress={() => setOpen(true)} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-        <View
-          style={{
-            width: 45, height: 45, borderRadius: 30, backgroundColor: "#ccc",
-            justifyContent: "center", alignItems: "center",
-          }}
-        >
-          <Text style={{ fontSize: 8, color: "#000", textAlign: "center" }}>Profile</Text>
-        </View>
+        <Image
+          source={(() => {
+            if (imgError) return require("./person-circle.svg");
+            if (!profilePicture) return require("./person-circle.svg");
+            if (typeof profilePicture === "string") return { uri: profilePicture };
+            if (profilePicture?.uri || profilePicture?.width || profilePicture?.height) return profilePicture;
+            return require("./person-circle.svg");
+          })()}
+          onError={() => setImgError(true)}
+          style={{ width: 45, height: 45, borderRadius: 30, backgroundColor: "#E6E6E6" }}
+          resizeMode="cover"
+        />
       </TouchableOpacity>
 
       {/* Menu */}

@@ -6,6 +6,9 @@ import { useFonts } from "expo-font";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 // import AppLoading from "expo-app-loading";
 
+// * User context
+import { UserProvider } from "./components/UserContext";
+
 // * phase 0 screens
 import Loading from "./screens/Phase 0/Loading";
 import Welcome from "./screens/Phase 0/Welcome";
@@ -50,6 +53,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={tw`flex-1 bg-white`}>
         {!showLoader && (
+          <UserProvider>
           <NavigationContainer>
             <Stack.Navigator
               screenOptions={{ headerShown: false }}
@@ -70,6 +74,7 @@ export default function App() {
               <Stack.Screen name="ProgramDetails" component={ProgramDetails} />
             </Stack.Navigator>
           </NavigationContainer>
+          </UserProvider>
         )}
 
         {showLoader && (

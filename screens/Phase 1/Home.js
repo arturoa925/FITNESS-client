@@ -27,11 +27,13 @@ import { Picker } from "@react-native-picker/picker";
 import { TouchableWithoutFeedback } from "react-native";
 import { FlatList } from "react-native";
 
+// * user context
+import { useUser } from "../../components/UserContext";
+
 // * components
 import ProfileAvatarMenu from "../../components/Home/ProfilePic";
 import ProgressBar from "../../components/Home/CurrentWeekBar";
 import CalendarFoodLog from "../../components/Home/Calendar";
-
 
 export default function Home({ navigation }) {
   const { width, height, fontScale } = useWindowDimensions();
@@ -43,6 +45,9 @@ export default function Home({ navigation }) {
   const bodySize = isNarrow || isShort ? 15 / fontScale : 16 / fontScale;
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
 
+  // * user context
+  const { user } = useUser();
+
   // * log out user
   const handleLogout = async () => {
     try {
@@ -50,7 +55,9 @@ export default function Home({ navigation }) {
       const token = await SecureStore.getItemAsync("authToken");
 
       const baseURL =
-        Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+        Platform.OS === "android"
+          ? "http://10.0.2.2:3004"
+          : "http://localhost:3004";
       const logoutUrl = `${baseURL}/users/logout`;
 
       await fetch(logoutUrl, {
@@ -64,7 +71,7 @@ export default function Home({ navigation }) {
       // Clear all auth-related data
       await SecureStore.deleteItemAsync("authToken");
       await SecureStore.deleteItemAsync("refreshToken");
-      
+
       // Navigate back to Welcome
       navigation.replace("Welcome");
     } catch (error) {
@@ -112,7 +119,11 @@ export default function Home({ navigation }) {
             >
               {/* Profile picture placeholder (top right) */}
               <View style={{ alignItems: "flex-end" }}>
-                <ProfileAvatarMenu navigation={navigation} onLogout={handleLogout} />
+                <ProfileAvatarMenu
+                  navigation={navigation}
+                  onLogout={handleLogout}
+                  profilePicture={user?.profilePicture}
+                />
               </View>
 
               {/* Title below, centered */}
@@ -210,7 +221,7 @@ export default function Home({ navigation }) {
 
                 {/* see sweat button on the right */}
                 <TouchableOpacity
-                   onPress={() => navigation.navigate("Sessions")}
+                  onPress={() => navigation.navigate("Sessions")}
                   style={{
                     backgroundColor: "#E6B82C",
                     paddingVertical: 10,
@@ -262,7 +273,9 @@ export default function Home({ navigation }) {
               </View>
               {/* marathon */}
               <Pressable
-                onPress={() => navigation.navigate("ProgramDetails", { program: "Marathon" })}
+                onPress={() =>
+                  navigation.navigate("ProgramDetails", { program: "Marathon" })
+                }
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],
@@ -365,7 +378,7 @@ export default function Home({ navigation }) {
               </Text>
 
               <TouchableOpacity
-                 onPress={() => navigation.navigate("DailyGrind")}
+                onPress={() => navigation.navigate("DailyGrind")}
                 style={{
                   backgroundColor: "#E6B82C",
                   paddingVertical: 10,
@@ -384,7 +397,6 @@ export default function Home({ navigation }) {
                     fontFamily: "Joan",
                     fontWeight: "600",
                   }}
-                 
                 >
                   Generate Workout
                 </Text>
