@@ -25,6 +25,7 @@ WebBrowser.maybeCompleteAuthSession();
 import * as Linking from "expo-linking";
 import { makeRedirectUri } from "expo-auth-session";
 import { useUser } from "../../components/UserContext";
+import { decode as atob } from "base-64";
 import { section, json, info, warn, error, success } from "../../components/logger";
 
 export default function Welcome({ navigation }) {
@@ -366,13 +367,15 @@ export default function Welcome({ navigation }) {
       );
       json("Google result", result);
       if (result.type === "success" && result.url) {
-        // Parse fragment after '#': token, email, name, photo (adjust to your backend payload)
+        // Parse fragment after '#': token, email, name, photo, userId, providerId (adjust to your backend payload)
         const hash = result.url.split("#")[1] || "";
         const params = new URLSearchParams(hash);
         const token = params.get("token");
         const emailParam = params.get("email");
         const nameParam = params.get("name");
         const photo = params.get("photo");
+        let userIdParam = params.get("userId");
+        let providerIdParam = params.get("providerId");
 
         // Normalize Google avatar size (prefer square 256px)
         const normalizedPhoto =
@@ -380,7 +383,22 @@ export default function Welcome({ navigation }) {
             ? photo.replace(/=s\d+-c$/, "=s256-c").replace(/=s\d+$/, "=s256-c")
             : null;
 
-        json("Google parsed", { token, email: emailParam, name: nameParam, photo: normalizedPhoto });
+        // Fallback: derive userId from JWT payload if not provided by fragment
+        if ((!userIdParam || !providerIdParam) && token) {
+          try {
+            const payloadPart = token.split(".")[1];
+            if (payloadPart) {
+              const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+              const json = JSON.parse(atob(normalized));
+              userIdParam = userIdParam || json?.id || json?.userId || null;
+              providerIdParam = providerIdParam || json?.providerId || null;
+            }
+          } catch (_e) {
+            // ignore; will continue without IDs
+          }
+        }
+
+        json("Google parsed", { token, email: emailParam, name: nameParam, photo: normalizedPhoto, userId: userIdParam, providerId: providerIdParam });
 
         // Persist avatar so ProfilePic can load it even if props are missing
         try {
@@ -390,10 +408,18 @@ export default function Welcome({ navigation }) {
           }
         } catch (_) {}
 
+        // Persist userId and providerId for later use
+        try {
+          if (userIdParam) await SecureStore.setItemAsync("userId", String(userIdParam));
+          if (providerIdParam) await SecureStore.setItemAsync("providerId", String(providerIdParam));
+        } catch (_) {}
+
         // Optionally hydrate context immediately so UI can render avatar without waiting
         try {
           setUser((prev) => ({
             ...(typeof prev === "object" && prev ? prev : {}),
+            id: userIdParam || (prev && prev.id) || null,
+            providerId: providerIdParam || (prev && prev.providerId) || null,
             email: emailParam || (prev && prev.email) || null,
             firstName: nameParam ? String(nameParam).split(" ")[0] : (prev && prev.firstName) || null,
             lastName: nameParam ? String(nameParam).split(" ").slice(1).join(" ") : (prev && prev.lastName) || null,
@@ -408,6 +434,8 @@ export default function Welcome({ navigation }) {
           email: emailParam,
           name: nameParam,
           photo: normalizedPhoto,
+          userId: userIdParam,
+          providerId: providerIdParam,
           provider: "google",
         });
       }

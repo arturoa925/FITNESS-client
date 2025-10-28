@@ -1,7 +1,7 @@
 // ! begin at phase 2 : strength (title) -> weeks
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { PanResponder } from "react-native";
+import { PanResponder, ActivityIndicator } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -25,8 +25,16 @@ import * as SecureStore from "expo-secure-store";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import { useUser } from "../../components/UserContext";
 
 export default function Sessions({navigation}) {
+
+  const { user } = (useUser && typeof useUser === "function" ? useUser() : { user: null });
+  const [loading, setLoading] = useState(false);
+  const [noProgram, setNoProgram] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  // TEMP: mock training data — this will later be driven by the selected plan
+  const [weeksData, setWeeksData] = useState([]);
 
   const { width, height, fontScale } = useWindowDimensions();
   const isNarrow = width < 360;
@@ -51,12 +59,98 @@ export default function Sessions({navigation}) {
     })
   ).current;
 
-  // TEMP: mock training data — this will later be driven by the selected plan
-  const [weeksData, setWeeksData] = useState([
-    { week: 1, completedDays: 3, totalDays: 5 },
-    { week: 2, completedDays: 2, totalDays: 5 },
-    { week: 3, completedDays: 4, totalDays: 5 },
-  ]);
+  const resolveBaseURL = () =>
+    Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+  
+  const fetchProgram = useCallback(async () => {
+    try {
+      setLoading(true);
+      setNoProgram(false);
+      setErrorMsg("");
+      const token = await SecureStore.getItemAsync("authToken");
+      // Prefer ID from context, fall back to SecureStore
+      const storedId = await SecureStore.getItemAsync("userId");
+      const userId = (user && (user.id || user.userId)) || storedId;
+      if (!userId) {
+        setNoProgram(true);
+        setWeeksData([]);
+        setErrorMsg("Missing user id.");
+        return;
+      }
+      const url = `${resolveBaseURL()}/users/${encodeURIComponent(userId)}/training-programs`;
+      const res = await fetch(url, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (res.status === 404) {
+        setNoProgram(true);
+        setWeeksData([]);
+        return;
+      }
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Fetch failed (${res.status}): ${text}`);
+      }
+      const data = await res.json();
+      // Try to find a current program object
+      const program =
+        (data && (data.currentProgram || data.program || data[0])) || null;
+      if (!program) {
+        setNoProgram(true);
+        setWeeksData([]);
+        return;
+      }
+      // Normalize into [{ week, completedDays, totalDays }]
+      let weeks = [];
+      if (Array.isArray(program.weeks)) {
+        weeks = program.weeks.map((w, idx) => ({
+          week: w.week || w.number || w.index || idx + 1,
+          completedDays:
+            w.completedDays ??
+            (Array.isArray(w.days)
+              ? w.days.filter((d) => d.completed || d.done || d.status === "done").length
+              : 0),
+          totalDays:
+            w.totalDays ??
+            ((Array.isArray(w.days) ? w.days.length : (w.total || 0)) || 5),
+        }));
+      } else if (Array.isArray(data.weeks)) {
+        weeks = data.weeks.map((w, idx) => ({
+          week: w.week || w.number || w.index || idx + 1,
+          completedDays:
+            w.completedDays ??
+            (Array.isArray(w.days)
+              ? w.days.filter((d) => d.completed || d.done || d.status === "done").length
+              : 0),
+          totalDays:
+            w.totalDays ??
+            ((Array.isArray(w.days) ? w.days.length : (w.total || 0)) || 5),
+        }));
+      }
+      if (!weeks.length) {
+        setNoProgram(true);
+        setWeeksData([]);
+        return;
+      }
+      setWeeksData(weeks);
+    } catch (err) {
+      console.log("[Sessions] fetch error:", err);
+      setErrorMsg(err?.message || "Failed to load training program.");
+      setWeeksData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+  
+  useFocusEffect(
+    useCallback(() => {
+      fetchProgram();
+      return () => {};
+    }, [fetchProgram])
+  );
+
 
   const progressBarHeight = 16;
   const progressBarWidth = Math.min(240, Math.max(160, width * 0.55));
@@ -257,6 +351,38 @@ export default function Sessions({navigation}) {
     );
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={[tw`flex-1 items-center justify-center`, { backgroundColor: "#A4A4A4" }]}>
+        <ActivityIndicator size="large" />
+        <Text style={[tw`mt-3`, { color: "#0E0E0E" }]}>Loading your training program…</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (noProgram || weeksData.length === 0) {
+    return (
+      <SafeAreaView
+        style={[tw`flex-1 items-center justify-center px-6`, { backgroundColor: "#A4A4A4" }]}
+        {...panResponder.panHandlers}
+      >
+        <Text style={[tw`text-center mb-4`, { color: "#0E0E0E", fontSize: 18, fontFamily: "Joan" }]}>
+          You’re not enrolled in a training program yet.
+        </Text>
+        {Boolean(errorMsg) && (
+          <Text style={[tw`text-center mb-4`, { color: "#333" }]}>{errorMsg}</Text>
+        )}
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Home")}
+          style={{ backgroundColor: "#E6B82C", paddingVertical: 10, paddingHorizontal: 22, borderRadius: 20 }}
+        >
+          <Text style={{ color: "#000", fontSize: 18, fontFamily: "Joan", fontWeight: "600" }}>
+            Go Home and Enroll
+          </Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
 return (
     <SafeAreaView
@@ -293,9 +419,11 @@ return (
 
               {/* Weeks list with completion bars */}
               <View style={[tw`mt-2`, { width: "100%" }]}>
-                {weeksData.map((w) => (
-                  <WeekRow key={w.week} item={w} />
-                ))}
+                {weeksData.length > 0 ? (
+                  weeksData.map((w) => <WeekRow key={w.week} item={w} />)
+                ) : (
+                  <Text style={[tw`mt-4`, { color: "#0E0E0E" }]}>No weeks to display.</Text>
+                )}
               </View>
 
   <TouchableOpacity
@@ -309,6 +437,8 @@ return (
                   alignItems: "center",
                   justifyContent: "center",
                 }}
+                // Keep navigation onPress only on TouchableOpacity if desired
+                // onPress={() => navigation.navigate("TodaysSession")}
               >
                 <Text
                   style={{
@@ -317,7 +447,6 @@ return (
                     fontFamily: "Joan",
                     fontWeight: "600",
                   }}
-                  onPress={() => navigation.navigate("TodaysSession")}
                 >
                   Begin Today's Session
                 </Text>
