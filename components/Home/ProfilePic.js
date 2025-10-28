@@ -1,11 +1,35 @@
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, Modal, Pressable, Alert, Image } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 export default function ProfileAvatarMenu({ navigation, style, onLogout, profilePicture }) {
   const [open, setOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [storedPhoto, setStoredPhoto] = useState(null);
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        if (!profilePicture) {
+          const v = await SecureStore.getItemAsync("profilePicture");
+          if (isMounted && v) setStoredPhoto(v);
+          if (isMounted) { try { console.log("[ProfilePic] loaded from SecureStore:", v); } catch (_) {} }
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [profilePicture]);
+
+  // Reset error when we get a new URI to try
+  useEffect(() => {
+    const nextUri =
+      (typeof profilePicture === "string" && profilePicture.trim()) ||
+      (typeof storedPhoto === "string" && storedPhoto.trim()) ||
+      (profilePicture && profilePicture.uri);
+    if (nextUri) setImgError(false);
+  }, [profilePicture, storedPhoto]);
 
   const handleAccountSettings = () => {
     setOpen(false);
@@ -22,25 +46,39 @@ const handleLogout = async () => {
     // Fallback: clear locally and navigate
     await SecureStore.deleteItemAsync("authToken");
     await SecureStore.deleteItemAsync("refreshToken");
+    await SecureStore.deleteItemAsync("profilePicture");
     navigation?.replace?.("Welcome");
   } catch (e) {
     console.log("[ProfilePic] Logout error:", e);
   }
 };
 
+  const resolvedPhoto = (() => {
+    if (imgError) return { uri: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAp0B2x0d2oQAAAAASUVORK5CYII=" };
+    if (typeof profilePicture === "string" && profilePicture.trim().length > 0) return { uri: profilePicture.trim() };
+    if (typeof storedPhoto === "string" && storedPhoto.trim().length > 0) return { uri: storedPhoto.trim() };
+    if (profilePicture?.uri || profilePicture?.width || profilePicture?.height) return profilePicture;
+    return { uri: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAp0B2x0d2oQAAAAASUVORK5CYII=" };
+  })();
+  try {
+    console.log("[ProfilePic] using source:", typeof resolvedPhoto === "object" && resolvedPhoto.uri ? resolvedPhoto.uri : "local-asset");
+  } catch (_) {}
+
   return (
     <View style={style}>
       {/* Avatar */}
       <TouchableOpacity onPress={() => setOpen(true)} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
         <Image
-          source={(() => {
-            if (imgError) return require("./person-circle.svg");
-            if (!profilePicture) return require("./person-circle.svg");
-            if (typeof profilePicture === "string") return { uri: profilePicture };
-            if (profilePicture?.uri || profilePicture?.width || profilePicture?.height) return profilePicture;
-            return require("./person-circle.svg");
-          })()}
-          onError={() => setImgError(true)}
+          source={resolvedPhoto}
+          key={typeof resolvedPhoto === "object" && resolvedPhoto.uri ? resolvedPhoto.uri : "avatar-fallback"}
+          onLoad={() => { try { console.log("[ProfilePic] image loaded"); } catch (_) {} }}
+          onError={() => {
+            // Only mark error for remote URIs, not local fallbacks like SVG
+            if (typeof resolvedPhoto === "object" && resolvedPhoto.uri) {
+              setImgError(true);
+            }
+            try { console.log("[ProfilePic] image failed, falling back"); } catch (_) {}
+          }}
           style={{ width: 45, height: 45, borderRadius: 30, backgroundColor: "#E6E6E6" }}
           resizeMode="cover"
         />

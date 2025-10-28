@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   LogBox,
+  Image,
 } from "react-native";
 import tw from "twrnc";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -20,7 +21,9 @@ import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import * as WebBrowser from "expo-web-browser";
+WebBrowser.maybeCompleteAuthSession();
 import * as Linking from "expo-linking";
+import { makeRedirectUri } from "expo-auth-session";
 import { useUser } from "../../components/UserContext";
 import { section, json, info, warn, error, success } from "../../components/logger";
 
@@ -351,8 +354,9 @@ export default function Welcome({ navigation }) {
         Platform.OS === "android"
           ? "http://10.0.2.2:3004"
           : "http://localhost:3004";
-      const authUrl = `${baseURL}/auth/google?mode=minimal&state=mobile`;
-      const redirectUri = Linking.createURL("oauth-complete"); // e.g., fitnessapp://oauth-complete
+      // Use Expo AuthSession proxy so this works in Expo Go
+      const redirectUri = makeRedirectUri({ useProxy: true });
+      const authUrl = `${baseURL}/auth/google?mode=minimal&state=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
       section("Google auth session");
       json("Start", { authUrl, redirectUri });
 
@@ -369,13 +373,41 @@ export default function Welcome({ navigation }) {
         const emailParam = params.get("email");
         const nameParam = params.get("name");
         const photo = params.get("photo");
-        json("Google parsed", { token, email: emailParam, name: nameParam, photo });
+
+        // Normalize Google avatar size (prefer square 256px)
+        const normalizedPhoto =
+          typeof photo === "string"
+            ? photo.replace(/=s\d+-c$/, "=s256-c").replace(/=s\d+$/, "=s256-c")
+            : null;
+
+        json("Google parsed", { token, email: emailParam, name: nameParam, photo: normalizedPhoto });
+
+        // Persist avatar so ProfilePic can load it even if props are missing
+        try {
+          if (normalizedPhoto) {
+            await SecureStore.setItemAsync("profilePicture", normalizedPhoto);
+            try { await Image.prefetch(normalizedPhoto); } catch (_) {}
+          }
+        } catch (_) {}
+
+        // Optionally hydrate context immediately so UI can render avatar without waiting
+        try {
+          setUser((prev) => ({
+            ...(typeof prev === "object" && prev ? prev : {}),
+            email: emailParam || (prev && prev.email) || null,
+            firstName: nameParam ? String(nameParam).split(" ")[0] : (prev && prev.firstName) || null,
+            lastName: nameParam ? String(nameParam).split(" ").slice(1).join(" ") : (prev && prev.lastName) || null,
+            profilePicture: normalizedPhoto || (prev && prev.profilePicture) || null,
+            provider: "google",
+            token: token || (prev && prev.token) || null,
+          }));
+        } catch (_) {}
 
         navigation.replace("OutsideAuth", {
           token,
           email: emailParam,
           name: nameParam,
-          photo,
+          photo: normalizedPhoto,
           provider: "google",
         });
       }
