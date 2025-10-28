@@ -1,14 +1,17 @@
-import React, { useEffect, useRef } from "react";
-import { View, Animated, Easing } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { View, Animated, Easing, Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import * as SecureStore from "expo-secure-store";
 
 /**
  * ProgressBar
  * Props:
- *  - progress: number between 0 and 1
  *  - width: numeric pixel width for the bar
  */
-export default function ProgressBar({ progress = 0, width = 300 }) {
+export default function ProgressBar({ width = 300 }) {
+  const [progress, setProgress] = useState(0);
+  const [noProgram, setNoProgram] = useState(false);
+
   // animated progress (animate on mount/change)
   const progressAnim = useRef(new Animated.Value(0)).current;
   const completedAnimatedWidth = progressAnim.interpolate({
@@ -22,6 +25,52 @@ export default function ProgressBar({ progress = 0, width = 300 }) {
     inputRange: [0, 1],
     outputRange: [-width, width],
   });
+
+  useEffect(() => {
+    const fetchProgress = async () => {
+      try {
+        const storedId = await SecureStore.getItemAsync("userId");
+        if (!storedId) {
+          setNoProgram(true);
+          setProgress(0);
+          return;
+        }
+        const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+        const res = await fetch(`${baseURL}/users/${storedId}`);
+        if (!res.ok) {
+          setNoProgram(true);
+          setProgress(0);
+          return;
+        }
+        const data = await res.json();
+        if (!data || !Array.isArray(data.trainingPrograms) || data.trainingPrograms.length === 0) {
+          setNoProgram(true);
+          setProgress(0);
+          return;
+        }
+        const current = data.trainingPrograms[0];
+        const weeks = current.weeks || [];
+        const totals = weeks.reduce(
+          (acc, w) => {
+            const td = Number(w.totalDays) || 0;
+            const cd = Number(w.completedDays) || 0;
+            acc.total += td;
+            acc.done += Math.min(cd, td);
+            return acc;
+          },
+          { total: 0, done: 0 }
+        );
+        const ratio = totals.total > 0 ? totals.done / totals.total : 0;
+        setNoProgram(false);
+        setProgress(ratio);
+      } catch (e) {
+        console.log("[ProgressBar] fetch error:", e);
+        setNoProgram(true);
+        setProgress(0);
+      }
+    };
+    fetchProgress();
+  }, []);
 
   useEffect(() => {
     Animated.timing(progressAnim,
@@ -48,7 +97,7 @@ export default function ProgressBar({ progress = 0, width = 300 }) {
   }, [width]);
 
   return (
-    <View style={{ width, alignSelf: "center" }}>
+    <View style={{ width, alignSelf: "center", opacity: noProgram ? 0.3 : 1 }}>
       <View style={{ height: 16, borderRadius: 8, overflow: "hidden" }}>
         {/* faint full-length gradient (remaining/blurred portion) */}
         <LinearGradient
