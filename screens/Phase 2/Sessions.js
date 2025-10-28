@@ -1,6 +1,8 @@
 // ! begin at phase 2 : strength (title) -> weeks
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { PanResponder } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   View,
@@ -34,6 +36,20 @@ export default function Sessions({navigation}) {
   const h2Size = isNarrow || isShort ? 18 / fontScale : 20 / fontScale;
   const bodySize = isNarrow || isShort ? 15 / fontScale : 16 / fontScale;
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
+
+  const nav = useNavigation();
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 25 && Math.abs(gestureState.dy) < 50;
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx > 80) {
+          nav.navigate("Home");
+        }
+      },
+    })
+  ).current;
 
   // TEMP: mock training data — this will later be driven by the selected plan
   const [weeksData, setWeeksData] = useState([
@@ -243,7 +259,10 @@ export default function Sessions({navigation}) {
 
 
 return (
-    <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
+    <SafeAreaView
+      style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}
+      {...panResponder.panHandlers}
+    >
       <KeyboardAvoidingView
         style={tw`flex-1`}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
