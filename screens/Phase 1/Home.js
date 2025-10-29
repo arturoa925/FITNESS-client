@@ -80,15 +80,50 @@ export default function Home({ navigation }) {
     }
   };
 
-  // progress for training plan (mock values for now)
-  // ! replace with user data
-  const weekCurrent = 8; // e.g., Week 3
-  const weekTotal = 12; // e.g., out of 12
-  const progress = Math.max(
-    0,
-    Math.min(1, weekCurrent / Math.max(1, weekTotal))
+  const [weekInfo, setWeekInfo] = useState({ current: null, total: null, noProgram: false });
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      (async () => {
+        try {
+          const storedId = await SecureStore.getItemAsync("userId");
+          if (!storedId) {
+            if (isActive) setWeekInfo({ current: null, total: null, noProgram: true });
+            return;
+          }
+          const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+          const res = await fetch(`${baseURL}/users/${storedId}`);
+          if (!res.ok) {
+            if (isActive) setWeekInfo({ current: null, total: null, noProgram: true });
+            return;
+          }
+          const data = await res.json();
+          // Resolve program and weeks from common shapes
+          const program = (data?.trainingPrograms && data.trainingPrograms[0]) || data?.currentProgram || data?.program || null;
+          const weeksArr = Array.isArray(program?.weeks) ? program.weeks : Array.isArray(data?.weeks) ? data.weeks : [];
+          const totalWeeks = weeksArr.length;
+          if (!program || totalWeeks === 0) {
+            if (isActive) setWeekInfo({ current: null, total: null, noProgram: true });
+            return;
+          }
+          // Count fully completed weeks
+          const completedWeeks = weeksArr.reduce((acc, w) => {
+            const td = Number(w.totalDays) || (Array.isArray(w.days) ? w.days.length : 0);
+            const cd = Number(w.completedDays) || (Array.isArray(w?.days) ? w.days.filter(d => d?.completed || d?.done || d?.status === "done").length : 0);
+            return acc + (td > 0 && cd >= td ? 1 : 0);
+          }, 0);
+          // Current week is the next one in progress
+          const currentWeek = Math.min(totalWeeks, completedWeeks + 1);
+          if (isActive) setWeekInfo({ current: currentWeek, total: totalWeeks, noProgram: false });
+        } catch (e) {
+          console.log("[Home] week fetch error:", e);
+          if (isActive) setWeekInfo({ current: null, total: null, noProgram: true });
+        }
+      })();
+      return () => { isActive = false; };
+    }, [])
   );
-  const completedWidth = progress * (maxWidth * 0.8); // matches marathon image & stats row width
 
   // Hard-coded workout completions for display (YYYY-MM-DD)
   const completedWorkouts = {
@@ -214,9 +249,11 @@ export default function Home({ navigation }) {
               >
                 {/* weeks need to be updated with user data */}
                 <Text
-                  style={[tw`text-3xl`, { color: "black", fontFamily: "Joan" }]}
+                  style={[tw`text-3xl`, { color: "black", fontFamily: "Joan", opacity: weekInfo.noProgram ? 0.5 : 1 }]}
                 >
-                  Week #/#
+                  {weekInfo.current && weekInfo.total
+                    ? `Week ${weekInfo.current}/${weekInfo.total}`
+                    : "Week --/--"}
                 </Text>
 
                 {/* see sweat button on the right */}
@@ -247,7 +284,7 @@ export default function Home({ navigation }) {
               </View>
 
               {/* gradient progress bar */}
-              <ProgressBar progress={progress} width={maxWidth * 0.8} />
+              <ProgressBar width={maxWidth * 0.8} />
 
               {/* New section: Start a New Training Program */}
               <View
