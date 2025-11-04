@@ -27,7 +27,76 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useUser } from "../../components/UserContext";
 
-export default function Sessions({navigation}) {
+// Normalize a program into week rows: [{ week, completedDays, totalDays, days: [{title,completed}] }]
+const deriveWeekRows = (programLike, fallbackDuration) => {
+  if (!programLike) return [];
+  // If already in row form
+  if (Array.isArray(programLike) && programLike.length && typeof programLike[0] === "object" && ("week" in programLike[0])) {
+    return programLike.map((r, idx) => ({
+      week: r.week ?? r.number ?? r.index ?? idx + 1,
+      completedDays: Number(r.completedDays) || 0,
+      totalDays: Number(r.totalDays) || 0,
+      days: Array.isArray(r.days)
+        ? r.days.map((d, di) => ({
+            title: d?.title || `Day ${di + 1}`,
+            completed: Boolean(d?.completed || d?.done || d?.status === "done"),
+          }))
+        : Array.from({ length: Number(r.totalDays) || 0 }, (_ , di) => ({ title: `Day ${di + 1}`, completed: di < (Number(r.completedDays) || 0) })),
+    }));
+  }
+  // If program.weeks exists
+  if (Array.isArray(programLike.weeks)) {
+    return programLike.weeks.map((w, idx) => {
+      const days = Array.isArray(w?.days) ? w.days : [];
+      const cd = Number(w?.completedDays) || days.filter(d => d?.completed || d?.done || d?.status === "done").length;
+      const td = Number(w?.totalDays) || days.length || Number(w?.total) || 0;
+      const dayRows = days.map((d, di) => ({
+        title: d?.title || `Day ${di + 1}`,
+        completed: Boolean(d?.completed || d?.done || d?.status === "done"),
+      }));
+      return {
+        week: w.week || w.number || w.index || idx + 1,
+        completedDays: cd,
+        totalDays: td || 5,
+        days: dayRows,
+      };
+    });
+  }
+  // If program.workouts grouped by weekIndex
+  if (Array.isArray(programLike.workouts)) {
+    const grouped = {};
+    for (const wk of programLike.workouts) {
+      const wi = Number(wk.weekIndex ?? wk.week ?? 0);
+      const days = Array.isArray(wk.days) ? wk.days : [];
+      if (!grouped[wi]) grouped[wi] = [];
+      grouped[wi].push(...days);
+    }
+    const indices = Object.keys(grouped).map(n => Number(n)).sort((a,b) => a - b);
+    return indices.map((i, idx) => {
+      const days = grouped[i] || [];
+      const cd = days.filter(d => d?.completed || d?.done || d?.status === "done").length;
+      const td = days.length || 5;
+      const dayRows = days.map((d, di) => ({
+        title: d?.title || `Day ${di + 1}`,
+        completed: Boolean(d?.completed || d?.done || d?.status === "done"),
+      }));
+      return { week: (i + 1) || (idx + 1), completedDays: cd, totalDays: td, days: dayRows };
+    });
+  }
+  // Fallback: duration only
+  const dur = Number(programLike.duration ?? fallbackDuration ?? 0);
+  if (dur > 0) {
+    return Array.from({ length: dur }, (_, idx) => ({
+      week: idx + 1,
+      completedDays: 0,
+      totalDays: 5,
+      days: Array.from({ length: 5 }, (__ , di) => ({ title: `Day ${di + 1}`, completed: false })),
+    }));
+  }
+  return [];
+};
+
+export default function Sessions({ navigation, route }) {
 
   const { user } = (useUser && typeof useUser === "function" ? useUser() : { user: null });
   const [loading, setLoading] = useState(false);
@@ -67,14 +136,27 @@ export default function Sessions({navigation}) {
       setLoading(true);
       setNoProgram(false);
       setErrorMsg("");
+      // Fast path: use preloaded program/weeks passed via navigation
+      if (route?.params?.weeks || route?.params?.program) {
+        const rows = route?.params?.weeks && Array.isArray(route.params.weeks)
+          ? deriveWeekRows(route.params.weeks)
+          : deriveWeekRows(route.params.program, route.params.program?.duration);
+        if (rows.length) {
+          setWeeksData(rows);
+          setNoProgram(false);
+          return;
+        }
+      }
       const token = await SecureStore.getItemAsync("authToken");
       // Prefer ID from context, fall back to SecureStore
       const storedId = await SecureStore.getItemAsync("userId");
       const userId = (user && (user.id || user.userId)) || storedId;
       if (!userId) {
+        // If we had preloaded weeks/program, we'd have returned above. At this point, guide user to sign in.
         setNoProgram(true);
         setWeeksData([]);
-        setErrorMsg("Missing user id.");
+        setErrorMsg("Please sign in to load your sessions.");
+        try { navigation.navigate("Login"); } catch {}
         return;
       }
       const url = `${resolveBaseURL()}/users/${encodeURIComponent(userId)}/training-programs`;
@@ -94,47 +176,24 @@ export default function Sessions({navigation}) {
         throw new Error(`Fetch failed (${res.status}): ${text}`);
       }
       const data = await res.json();
-      // Try to find a current program object
-      const program =
-        (data && (data.currentProgram || data.program || data[0])) || null;
+      // Try to find a current program object (API may return the program object directly OR an array)
+      const program = Array.isArray(data)
+        ? (data[0] || null)
+        : (data?.currentProgram || data?.program || data || null);
       if (!program) {
         setNoProgram(true);
         setWeeksData([]);
         return;
       }
       // Normalize into [{ week, completedDays, totalDays }]
-      let weeks = [];
-      if (Array.isArray(program.weeks)) {
-        weeks = program.weeks.map((w, idx) => ({
-          week: w.week || w.number || w.index || idx + 1,
-          completedDays:
-            w.completedDays ??
-            (Array.isArray(w.days)
-              ? w.days.filter((d) => d.completed || d.done || d.status === "done").length
-              : 0),
-          totalDays:
-            w.totalDays ??
-            ((Array.isArray(w.days) ? w.days.length : (w.total || 0)) || 5),
-        }));
-      } else if (Array.isArray(data.weeks)) {
-        weeks = data.weeks.map((w, idx) => ({
-          week: w.week || w.number || w.index || idx + 1,
-          completedDays:
-            w.completedDays ??
-            (Array.isArray(w.days)
-              ? w.days.filter((d) => d.completed || d.done || d.status === "done").length
-              : 0),
-          totalDays:
-            w.totalDays ??
-            ((Array.isArray(w.days) ? w.days.length : (w.total || 0)) || 5),
-        }));
-      }
+      const weeks = deriveWeekRows(program, program?.duration);
       if (!weeks.length) {
         setNoProgram(true);
         setWeeksData([]);
         return;
       }
       setWeeksData(weeks);
+      console.log("[Sessions] loaded program:", program?.name || program?.slug || "(unnamed)", "weeks:", weeks.length);
     } catch (err) {
       console.log("[Sessions] fetch error:", err);
       setErrorMsg(err?.message || "Failed to load training program.");
@@ -142,7 +201,7 @@ export default function Sessions({navigation}) {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, navigation, route]);
   
   useFocusEffect(
     useCallback(() => {
@@ -167,7 +226,12 @@ export default function Sessions({navigation}) {
     const caretAnim = useRef(new Animated.Value(0)).current;
 
     // animated values for each day row (0 = hidden, 1 = shown)
-    const dayAnims = useRef(Array.from({ length: item.totalDays }, () => new Animated.Value(0))).current;
+    const dayAnims = useRef(
+      Array.from(
+        { length: Array.isArray(item?.days) ? item.days.length : item.totalDays },
+        () => new Animated.Value(0)
+      )
+    ).current;
 
     const pct = getProgress(item.completedDays, item.totalDays);
     const progressAnim = useRef(new Animated.Value(0)).current;
@@ -252,101 +316,107 @@ export default function Sessions({navigation}) {
 
     return (
       <>
-      <Pressable
-        onPress={() => setExpanded((prev) => !prev)}
-        style={[tw`flex-row items-center justify-between mb-12`, { width: "100%", paddingHorizontal: 4 }]}
-      >
-        <View style={tw`flex-row items-center`}>
-          <Pressable
-            onPress={() => setExpanded((prev) => !prev)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={[tw`text-2xl font-bold`, { color: "#0E0E0E", fontFamily: "Joan" }]}> {`Week ${item.week}`} </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setExpanded((prev) => !prev)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Animated.Text
-              style={{
-                marginLeft: 6,
-                fontSize: 16,
-                transform: [
-                  {
-                    rotate: caretAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] }),
-                  },
-                ],
-              }}
-            >
-              ▾
-            </Animated.Text>
-          </Pressable>
-        </View>
-
-        {/* progress bar with animated width + shimmer */}
-        <View
-          style={[
-            tw`rounded-full`,
-            {
-              width: progressBarWidth,
-              height: progressBarHeight,
-              overflow: "hidden",
-            },
-          ]}
+        <Pressable
+          onPress={() => setExpanded((prev) => !prev)}
+          style={[tw`flex-row items-center justify-between mb-12`, { width: "100%", paddingHorizontal: 4 }]}
         >
-          {/* faint full-length gradient as track */}
-          <LinearGradient
-            colors={["#87DAF0", "#355D73"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, opacity: 0.35, borderRadius: 999 }}
-          />
+          <View style={tw`flex-row items-center`}>
+            <Pressable
+              onPress={() => setExpanded((prev) => !prev)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={[tw`text-2xl font-bold`, { color: "#0E0E0E", fontFamily: "Joan" }]}> {`Week ${item.week}`} </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setExpanded((prev) => !prev)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Animated.Text
+                style={{
+                  marginLeft: 6,
+                  fontSize: 16,
+                  transform: [
+                    {
+                      rotate: caretAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] }),
+                    },
+                  ],
+                }}
+              >
+                ▾
+              </Animated.Text>
+            </Pressable>
+          </View>
 
-          {/* animated completed portion */}
-          <Animated.View
-            style={{ width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: [0, progressBarWidth] }), height: "100%", overflow: "hidden" }}
+          {/* progress bar with animated width + shimmer */}
+          <View
+            style={[
+              tw`rounded-full`,
+              {
+                width: progressBarWidth,
+                height: progressBarHeight,
+                overflow: "hidden",
+              },
+            ]}
           >
+            {/* faint full-length gradient as track */}
             <LinearGradient
               colors={["#87DAF0", "#355D73"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}
+              style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, opacity: 0.35, borderRadius: 999 }}
             />
-          </Animated.View>
 
-          {/* shimmering sweep */}
-          <Animated.View
-            pointerEvents="none"
-            style={{ position: "absolute", top: 0, bottom: 0, width: 120, opacity: 0.6, transform: [{ translateX: shimmerTranslate }] }}
-          >
-            <LinearGradient
-              colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.65)", "rgba(255,255,255,0)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={{ flex: 1 }}
-            />
-          </Animated.View>
-        </View>
-      </Pressable>
-      {expanded && (
-        <View style={[tw`mt-3 mb-6`, { paddingLeft: 8 }]}> 
-          {Array.from({ length: item.totalDays }).map((_, i) => {
-            const a = dayAnims[i];
-            const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [8, 0] });
-            return (
-              <Animated.View
-                key={i}
-                style={[tw`flex-row items-center justify-center py-1`, { opacity: a, transform: [{ translateY }] }]}
-              >
-                <Text style={[tw`mr-2`, { opacity: i < item.completedDays ? 1 : 0.4, fontSize: 22, color:"#E6B82C" }]}> 
-                  {i < item.completedDays ? "✓" : "○"}
-                </Text>
-                <Text style={[tw`text-base text-3xl`, { color: "#0E0E0E", fontFamily: "Joan" }]}> {`Day ${i + 1}`} </Text>
-              </Animated.View>
-            );
-          })}
-        </View>
-      )}
+            {/* animated completed portion */}
+            <Animated.View
+              style={{ width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: [0, progressBarWidth] }), height: "100%", overflow: "hidden" }}
+            >
+              <LinearGradient
+                colors={["#87DAF0", "#355D73"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}
+              />
+            </Animated.View>
+
+            {/* shimmering sweep */}
+            <Animated.View
+              pointerEvents="none"
+              style={{ position: "absolute", top: 0, bottom: 0, width: 120, opacity: 0.6, transform: [{ translateX: shimmerTranslate }] }}
+            >
+              <LinearGradient
+                colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.65)", "rgba(255,255,255,0)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ flex: 1 }}
+              />
+            </Animated.View>
+          </View>
+        </Pressable>
+        {expanded && (
+          <View style={[tw`mt-3 mb-6`, { paddingLeft: 4, paddingRight: 8 }]}>
+            {(Array.isArray(item?.days)
+              ? item.days
+              : Array.from({ length: item.totalDays }).map((_, i) => ({ title: `Day ${i + 1}`, completed: i < item.completedDays }))
+            ).map((d, i) => {
+              const a = dayAnims[i];
+              const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [8, 0] });
+              const isDone = typeof d?.completed === "boolean" ? d.completed : i < item.completedDays;
+              return (
+                <Animated.View
+                  key={i}
+                  style={[tw`flex-row items-center justify-start py-1`, { opacity: a, transform: [{ translateY }] }]}
+                >
+                  <Text style={[tw`mr-2`, { opacity: isDone ? 1 : 0.4, fontSize: 22, color: "#E6B82C" }]}>
+                    {isDone ? "✓" : "○"}
+                  </Text>
+                  <Text style={[tw`text-base`, { color: "#0E0E0E", fontFamily: "Joan", fontSize: 18 }]}>
+                    {d?.title || `Day ${i + 1}`}
+                  </Text>
+                </Animated.View>
+              );
+            })}
+          </View>
+        )}
       </>
     );
   };

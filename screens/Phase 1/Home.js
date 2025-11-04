@@ -137,6 +137,50 @@ export default function Home({ navigation, route }) {
     total: null,
     noProgram: false,
   });
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const handleOpenSessions = useCallback(async () => {
+    try {
+      setSessionsLoading(true);
+      const storedId = await SecureStore.getItemAsync("userId");
+      if (!storedId) {
+        Alert.alert("Sign in required", "Please log in to view your sessions.");
+        return;
+      }
+      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const token = await SecureStore.getItemAsync("authToken");
+      if (!token) {
+        Alert.alert("Authentication required", "Your session expired. Please sign in again.");
+        navigation.navigate("Login");
+        return;
+      }
+
+      // Prefer the latest from the dedicated endpoint
+      let program = await fetchCurrentProgram(storedId, token, baseURL);
+
+      // If we landed here right after subscribing, also consider a recent payload
+      if (!program && route?.params?.subscription) {
+        const sub = route.params.subscription;
+        program = sub?.trainingProgram || sub?.program || (Array.isArray(sub?.trainingPrograms) ? sub.trainingPrograms[0] : null) || null;
+      }
+
+      if (!program) {
+        Alert.alert("No training program", "You aren't enrolled in a program yet.");
+        return;
+      }
+
+      const weeks = deriveWeeksFromProgram(program, program?.duration);
+      navigation.navigate("Sessions", {
+        program,
+        weeks,
+        totalWeeks: weeks?.length || Number(program?.duration) || 0,
+      });
+    } catch (e) {
+      console.log("[Home] handleOpenSessions error:", e);
+      Alert.alert("Error", "Could not load your training program.");
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [navigation, route]);
 
   useFocusEffect(
     useCallback(() => {
@@ -510,30 +554,31 @@ export default function Home({ navigation, route }) {
                 </Text>
 
                 {/* see sweat button on the right */}
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("Sessions")}
+              <TouchableOpacity
+                onPress={handleOpenSessions}
+                disabled={sessionsLoading}
+                style={{
+                  backgroundColor: "#E6B82C",
+                  paddingVertical: 10,
+                  paddingHorizontal: 22,
+                  borderRadius: 20,
+                  minWidth: 110,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: sessionsLoading ? 0.6 : 1,
+                }}
+              >
+                <Text
                   style={{
-                    backgroundColor: "#E6B82C",
-                    paddingVertical: 10,
-                    paddingHorizontal: 22,
-                    borderRadius: 20,
-                    minWidth: 110,
-                    alignItems: "center",
-                    justifyContent: "center",
+                    color: "#000",
+                    fontSize: 20,
+                    fontFamily: "Joan",
+                    fontWeight: "600",
                   }}
                 >
-                  <Text
-                    style={{
-                      color: "#000",
-                      fontSize: 20,
-                      fontFamily: "Joan",
-                      fontWeight: "600",
-                    }}
-                    onPress={() => navigation.navigate("Sessions")}
-                  >
-                    See Sweat
-                  </Text>
-                </TouchableOpacity>
+                  {sessionsLoading ? "Loading…" : "See Sweat"}
+                </Text>
+              </TouchableOpacity>
               </View>
 
               {/* gradient progress bar */}
