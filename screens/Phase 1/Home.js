@@ -133,6 +133,86 @@ export default function Home({ navigation }) {
     "2025-10-06": [{ name: "Long Run 8mi" }],
   };
 
+  // Open ProgramDetails for a selected catalog program (from /users/training-programs)
+  const handleOpenCatalogDetails = useCallback(async (label, slug) => {
+    try {
+      const token = await SecureStore.getItemAsync("authToken");
+      const baseURL =
+        Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const res = await fetch(`${baseURL}/users/training-programs`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!res.ok) {
+        navigation.navigate("ProgramDetails", {
+          programName: label || "Program",
+          program: null,
+          noProgram: true,
+          message: "Could not load training programs. Please try again.",
+        });
+        return;
+      }
+      const catalog = await res.json();
+      // Try to match robustly with aliases
+      console.log("[catalog]", Array.isArray(catalog) ? catalog.map(p => ({ name: p?.name, slug: p?.slug, id: p?.id })) : catalog);
+      let selected = null;
+      if (Array.isArray(catalog)) {
+        // 1) Exact slug/key/id equality (case-insensitive)
+        if (slug) {
+          const slugLc = String(slug).toLowerCase();
+          selected = catalog.find((p) => [p?.slug, p?.key, p?.id].some(v => v && String(v).toLowerCase() === slugLc)) || null;
+        }
+
+        // 2) Exact name equality (case-insensitive)
+        if (!selected && label) {
+          const labelLc = String(label).toLowerCase();
+          selected = catalog.find(p => typeof p?.name === "string" && p.name.toLowerCase() === labelLc) || null;
+        }
+
+        // 3) Alias-based partial matching (e.g., "Hybrid" → "Hypertrophy Split")
+        if (!selected && label) {
+          const labelLc = String(label).toLowerCase();
+          const aliases = {
+            hybrid: ["hypertrophy", "push", "pull", "split"],
+            marathon: ["marathon", "half marathon"],
+          };
+          const needles = [labelLc, ...(aliases[labelLc] || [])];
+          selected = catalog.find(p => {
+            const n = (p?.name || "").toLowerCase();
+            return needles.some(k => k && n.includes(k));
+          }) || null;
+        }
+      }
+      console.log("[selected]", selected?.name, selected?.slug, selected?.id);
+      if (!selected) {
+        navigation.navigate("ProgramDetails", {
+          programName: label || "Program",
+          program: null,
+          noProgram: true,
+          message: "Program not found in catalog.",
+        });
+        return;
+      }
+      // Pass the full selected program; ProgramDetails normalizes (workouts or weeks)
+      navigation.navigate("ProgramDetails", {
+        programName: selected.name || label || "Program",
+        program: selected,
+        noProgram: false,
+        source: "catalog",
+      });
+    } catch (e) {
+      console.log("[Home] handleOpenCatalogDetails error:", e);
+      navigation.navigate("ProgramDetails", {
+        programName: label || "Program",
+        program: null,
+        noProgram: true,
+        message: "Something went wrong opening Program Details.",
+      });
+    }
+  }, [navigation]);
+
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
       {/* Formatting */}
@@ -310,9 +390,7 @@ export default function Home({ navigation }) {
               </View>
               {/* marathon */}
               <Pressable
-                onPress={() =>
-                  navigation.navigate("ProgramDetails", { program: "Marathon" })
-                }
+                onPress={() => handleOpenCatalogDetails("Marathon", "half-marathon-8-week-prep")}
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],
@@ -347,7 +425,7 @@ export default function Home({ navigation }) {
 
               {/* hybrid */}
               <Pressable
-                onPress={() => navigation.navigate("ProgramDetails")}
+                onPress={() => handleOpenCatalogDetails("Hybrid", "hypertrophy-split")}
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],

@@ -24,112 +24,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 
 
-function ExerciseCard({ exercise, maxWidth }) {
-  return (
-    <View style={{ width: maxWidth, alignSelf: "center", paddingVertical: 16 }}>
-      {/* Exercise Name */}
-      <Text
-        style={{
-          textAlign: "center",
-          color: "#000000ff",
-          fontFamily: "Joan",
-          fontSize: 20,
-          marginBottom: 8,
-        }}
-      >
-        {exercise.name}
-      </Text>
 
-      {/* Image placeholder or real image */}
-      {exercise.imageUri ? (
-        <Image
-          source={{ uri: exercise.imageUri }}
-          style={{
-            width: maxWidth * 0.8,
-            height: maxWidth * 0.6,
-            alignSelf: "center",
-            borderRadius: 12,
-            marginTop: 20,
-          }}
-          resizeMode="cover"
-        />
-      ) : (
-        <View
-          style={{
-            width: maxWidth * 0.8,
-            height: maxWidth * 0.6,
-            alignSelf: "center",
-            borderRadius: 12,
-            marginTop: 20,
-            backgroundColor: "#ccc",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Text
-            style={{
-              fontFamily: "Joan",
-              color: "#000",
-              fontSize: 18,
-              textAlign: "center",
-            }}
-          >
-            Image Placeholder
-          </Text>
-        </View>
-      )}
-
-      {/* Target and Description */}
-      <Text
-        style={{
-          fontFamily: "Joan",
-          color: "#000",
-          fontSize: 18,
-          textAlign: "center",
-          marginTop: 30,
-          borderWidth: 1,
-          borderColor: "#000",
-          padding: 10,
-          width: maxWidth * 0.9,
-          alignSelf: "center",
-        }}
-      >
-        {exercise.description}
-      </Text>
-
-      {/* Reps */}
-      <View style={{ width: maxWidth * 0.9, marginTop: 30, marginBottom: 50,alignSelf: "center" }}>
-        {(exercise.reps || []).map((line, idx) => (
-          <View
-            key={`rep-${exercise.id || exercise.name}-${idx}`}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              alignSelf: "center",
-              marginBottom: 6,
-            }}
-          >
-            <Text style={{ fontFamily: "Joan", fontSize: 18, color: "#000", marginRight: 8 }}>•</Text>
-            <Text
-              style={{
-                fontFamily: "Joan",
-                fontSize: 20,
-                color: "#000",
-                lineHeight: 26,
-                textAlign: "center",
-              }}
-            >
-              {line}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-export default function ProgramDetails({ navigation }) {
+export default function ProgramDetails({ navigation, route }) {
   const { width, height, fontScale } = useWindowDimensions();
   const isNarrow = width < 360;
   const isShort = height < 700;
@@ -139,37 +35,74 @@ export default function ProgramDetails({ navigation }) {
   const bodySize = isNarrow || isShort ? 15 / fontScale : 16 / fontScale;
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
 
-  // Placeholder array until backend fetch
-  const [exercises, setExercises] = useState([
-    {
-      id: "ex-1",
-      name: "Kettlebell Swings",
-      imageUri: "",
-      description: "Target and Description",
-      reps: ["Easy - 3 sets by 10 reps", "Med - 4 sets by 10 reps", "Hard - 4 sets by 6 - 8 reps"],
-    },
-    {
-      id: "ex-2",
-      name: "Goblet Squats",
-      imageUri: "",
-      description: "Target and Description",
-      reps: ["Easy - 3 x 8", "Med - 4 x 10", "Hard - 5 x 5"],
-    },
-    {
-      id: "ex-3",
-      name: "Push-Ups",
-      imageUri: "",
-      description: "Target and Description",
-      reps: ["Easy - 3 x 10", "Med - 4 x 12", "Hard - 5 x 15"],
-    },
-    {
-      id: "ex-4",
-      name: "Plank",
-      imageUri: "",
-      description: "Target and Description",
-      reps: ["Easy - 3 x :20s", "Med - 4 x :30s", "Hard - 4 x :45s"],
-    },
-  ]);
+  // Params from navigation
+  const { programName, program, noProgram, message } = (route && route.params) || {};
+  const [title, setTitle] = useState(programName || "Program Details");
+
+  // Normalized weeks → days → workouts for centered column display
+  const [weeks, setWeeks] = useState([]);
+
+  const formatWorkoutLabel = (w) => {
+    // Build a concise label from known fields; fall back to name
+    if (!w) return "";
+    if (w.distanceKm) return `${w.name || "Run"} · ${w.distanceKm} km`;
+    if (w.distanceM) return `${w.name || "Run"} · ${w.distanceM} m`;
+    if (w.durationSec && w.sets) return `${w.name || "Intervals"} · ${w.sets}×${Math.round(w.durationSec/60)} min`;
+    if (w.durationSec) return `${w.name || "Session"} · ${Math.round(w.durationSec/60)} min`;
+    if (w.sets && w.reps) return `${w.name || "Strength"} · ${w.sets}×${w.reps}`;
+    return w.name || "Workout";
+  };
+
+  const formatExerciseLabel = (ex) => {
+    if (!ex) return "";
+    const n = ex.name || "Exercise";
+    if (ex.distanceKm) return `${n} — ${ex.distanceKm} km`;
+    if (ex.distanceM) return `${n} — ${ex.distanceM} m`;
+    if (ex.durationSec && ex.sets) return `${n} — ${ex.sets}×${Math.round(ex.durationSec/60)} min`;
+    if (ex.durationSec) return `${n} — ${Math.round(ex.durationSec/60)} min`;
+    if (ex.sets && ex.reps) return `${n} — ${ex.sets}×${ex.reps}`;
+    return n;
+  };
+
+  const normalizeWeeks = useCallback((p) => {
+    if (!p) return [];
+    const src = Array.isArray(p.weeks) ? p.weeks : Array.isArray(p.workouts) ? p.workouts : [];
+    return src.map((w, wi) => {
+      const weekNumber =
+        (typeof w.week === "number" && w.week) ||
+        (typeof w.number === "number" && w.number) ||
+        (typeof w.index === "number" && w.index + 1) ||
+        (typeof w.weekIndex === "number" && w.weekIndex + 1) ||
+        wi + 1;
+
+      const days = Array.isArray(w.days)
+        ? w.days.map((d, di) => {
+            const title = d.title || d.name || `Day ${di + 1}`;
+            const dayWorkouts = Array.isArray(d.workouts) ? d.workouts : [];
+            // Each day workout may itself contain exercises; prefer the workout's name
+            const workouts = dayWorkouts.map((dw) => {
+              const wName = dw.name || (Array.isArray(dw.exercises) && dw.exercises[0] ? formatWorkoutLabel(dw.exercises[0]) : formatWorkoutLabel(dw));
+              const exercises = Array.isArray(dw.exercises)
+                ? dw.exercises.map((ex) => formatExerciseLabel(ex))
+                : [];
+              return { name: wName, exercises };
+            });
+            return {
+              dayIndex: d.dayIndex ?? di,
+              title,
+              workouts,
+            };
+          })
+        : [];
+
+      return { week: weekNumber, days };
+    });
+  }, []);
+
+  useEffect(() => {
+    setTitle(programName || program?.name || "Program Details");
+    setWeeks(normalizeWeeks(program));
+  }, [programName, program, normalizeWeeks]);
 
   // --- Swipe right to go Home ---
   const swipeHandledRef = useRef(false);
@@ -237,14 +170,88 @@ export default function ProgramDetails({ navigation }) {
                   { color: "#87DAF0", fontFamily: "Joan" },
                 ]}
               >
-                Name of Program
+                {title}
               </Text>
             </View>
 
-            {/* Exercises list */}
-            {exercises.map((ex) => (
-              <ExerciseCard key={ex.id} exercise={ex} maxWidth={maxWidth} />
-            ))}
+            {/* Not enrolled / error message */}
+            {noProgram ? (
+              <View style={{ width: maxWidth, alignSelf: "center", marginBottom: 24 }}>
+                <Text style={{ color: "#000", fontFamily: "Joan", fontSize: 18, textAlign: "center", marginBottom: 12 }}>
+                  {message || "You’re not enrolled in a training program yet."}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("Home")}
+                  style={{ backgroundColor: "#E6B82C", paddingVertical: 10, paddingHorizontal: 22, borderRadius: 20, alignSelf: "center" }}
+                >
+                  <Text style={{ color: "#000", fontSize: 18, fontFamily: "Joan", fontWeight: "600" }}>
+                    Go Home and Enroll
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            {/* Weeks → Days → Workouts (centered column) */}
+            {weeks.length > 0 && !noProgram ? (
+              <View style={{ width: maxWidth, alignSelf: "center", marginBottom: 24 }}>
+                {weeks.map((wk) => (
+                  <View
+                    key={`week-${wk.week}`}
+                    style={{
+                      backgroundColor: "#FFFFFF",
+                      borderRadius: 12,
+                      marginBottom: 16,
+                      overflow: "hidden",
+                      borderWidth: 1,
+                      borderColor: "rgba(0,0,0,0.08)",
+                    }}
+                  >
+                    <View style={{ paddingVertical: 12, paddingHorizontal: 16, backgroundColor: "#EEE" }}>
+                      <Text style={{ color: "#0E0E0E", fontFamily: "Joan", fontSize: 20, textAlign: "center" }}>
+                        {`Week ${wk.week}`}
+                      </Text>
+                    </View>
+
+                    <View style={{ paddingVertical: 8 }}>
+                      {wk.days.map((day) => (
+                        <View key={`w${wk.week}-d${day.dayIndex}`} style={{ paddingVertical: 10, paddingHorizontal: 16 }}>
+                          <Text style={{ color: "#0E0E0E", fontFamily: "Joan", fontSize: 18, textAlign: "center" }}>
+                            {day.title}
+                          </Text>
+                          {Array.isArray(day.workouts) && day.workouts.length > 0 ? (
+                            <View style={{ marginTop: 6 }}>
+                              {day.workouts.map((w, wi) => (
+                                <View key={`w${wk.week}-d${day.dayIndex}-workout-${wi}`} style={{ marginTop: wi === 0 ? 0 : 6 }}>
+                                  <Text style={{ color: "#333", fontFamily: "Joan", fontSize: 16, textAlign: "center" }}>
+                                    {w.name}
+                                  </Text>
+                                  {Array.isArray(w.exercises) && w.exercises.length > 0 ? (
+                                    <View style={{ marginTop: 4 }}>
+                                      {w.exercises.map((label, ei) => (
+                                        <Text
+                                          key={`w${wk.week}-d${day.dayIndex}-ex-${ei}`}
+                                          style={{ color: "#444", fontFamily: "Manrope", fontSize: 14, textAlign: "center", marginTop: 2 }}
+                                        >
+                                          {label}
+                                        </Text>
+                                      ))}
+                                    </View>
+                                  ) : null}
+                                </View>
+                              ))}
+                            </View>
+                          ) : null}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : !noProgram ? (
+              <Text style={{ color: "#000", fontFamily: "Joan", fontSize: 18, textAlign: "center", marginVertical: 24 }}>
+                No program structure to display.
+              </Text>
+            ) : null}
 
 
             {/* Done button */}
