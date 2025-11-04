@@ -31,7 +31,12 @@ import { useUser } from "../../components/UserContext";
 const deriveWeekRows = (programLike, fallbackDuration) => {
   if (!programLike) return [];
   // If already in row form
-  if (Array.isArray(programLike) && programLike.length && typeof programLike[0] === "object" && ("week" in programLike[0])) {
+  if (
+    Array.isArray(programLike) &&
+    programLike.length &&
+    typeof programLike[0] === "object" &&
+    "week" in programLike[0]
+  ) {
     return programLike.map((r, idx) => ({
       week: r.week ?? r.number ?? r.index ?? idx + 1,
       completedDays: Number(r.completedDays) || 0,
@@ -41,14 +46,20 @@ const deriveWeekRows = (programLike, fallbackDuration) => {
             title: d?.title || `Day ${di + 1}`,
             completed: Boolean(d?.completed || d?.done || d?.status === "done"),
           }))
-        : Array.from({ length: Number(r.totalDays) || 0 }, (_ , di) => ({ title: `Day ${di + 1}`, completed: di < (Number(r.completedDays) || 0) })),
+        : Array.from({ length: Number(r.totalDays) || 0 }, (_, di) => ({
+            title: `Day ${di + 1}`,
+            completed: di < (Number(r.completedDays) || 0),
+          })),
     }));
   }
   // If program.weeks exists
   if (Array.isArray(programLike.weeks)) {
     return programLike.weeks.map((w, idx) => {
       const days = Array.isArray(w?.days) ? w.days : [];
-      const cd = Number(w?.completedDays) || days.filter(d => d?.completed || d?.done || d?.status === "done").length;
+      const cd =
+        Number(w?.completedDays) ||
+        days.filter((d) => d?.completed || d?.done || d?.status === "done")
+          .length;
       const td = Number(w?.totalDays) || days.length || Number(w?.total) || 0;
       const dayRows = days.map((d, di) => ({
         title: d?.title || `Day ${di + 1}`,
@@ -71,16 +82,25 @@ const deriveWeekRows = (programLike, fallbackDuration) => {
       if (!grouped[wi]) grouped[wi] = [];
       grouped[wi].push(...days);
     }
-    const indices = Object.keys(grouped).map(n => Number(n)).sort((a,b) => a - b);
+    const indices = Object.keys(grouped)
+      .map((n) => Number(n))
+      .sort((a, b) => a - b);
     return indices.map((i, idx) => {
       const days = grouped[i] || [];
-      const cd = days.filter(d => d?.completed || d?.done || d?.status === "done").length;
+      const cd = days.filter(
+        (d) => d?.completed || d?.done || d?.status === "done"
+      ).length;
       const td = days.length || 5;
       const dayRows = days.map((d, di) => ({
         title: d?.title || `Day ${di + 1}`,
         completed: Boolean(d?.completed || d?.done || d?.status === "done"),
       }));
-      return { week: (i + 1) || (idx + 1), completedDays: cd, totalDays: td, days: dayRows };
+      return {
+        week: i + 1 || idx + 1,
+        completedDays: cd,
+        totalDays: td,
+        days: dayRows,
+      };
     });
   }
   // Fallback: duration only
@@ -90,15 +110,18 @@ const deriveWeekRows = (programLike, fallbackDuration) => {
       week: idx + 1,
       completedDays: 0,
       totalDays: 5,
-      days: Array.from({ length: 5 }, (__ , di) => ({ title: `Day ${di + 1}`, completed: false })),
+      days: Array.from({ length: 5 }, (__, di) => ({
+        title: `Day ${di + 1}`,
+        completed: false,
+      })),
     }));
   }
   return [];
 };
 
 export default function Sessions({ navigation, route }) {
-
-  const { user } = (useUser && typeof useUser === "function" ? useUser() : { user: null });
+  const { user } =
+    useUser && typeof useUser === "function" ? useUser() : { user: null };
   const [loading, setLoading] = useState(false);
   const [noProgram, setNoProgram] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -129,8 +152,10 @@ export default function Sessions({ navigation, route }) {
   ).current;
 
   const resolveBaseURL = () =>
-    Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
-  
+    Platform.OS === "android"
+      ? "http://10.0.2.2:3004"
+      : "http://localhost:3004";
+
   const fetchProgram = useCallback(async () => {
     try {
       setLoading(true);
@@ -138,9 +163,13 @@ export default function Sessions({ navigation, route }) {
       setErrorMsg("");
       // Fast path: use preloaded program/weeks passed via navigation
       if (route?.params?.weeks || route?.params?.program) {
-        const rows = route?.params?.weeks && Array.isArray(route.params.weeks)
-          ? deriveWeekRows(route.params.weeks)
-          : deriveWeekRows(route.params.program, route.params.program?.duration);
+        const rows =
+          route?.params?.weeks && Array.isArray(route.params.weeks)
+            ? deriveWeekRows(route.params.weeks)
+            : deriveWeekRows(
+                route.params.program,
+                route.params.program?.duration
+              );
         if (rows.length) {
           setWeeksData(rows);
           setNoProgram(false);
@@ -156,10 +185,14 @@ export default function Sessions({ navigation, route }) {
         setNoProgram(true);
         setWeeksData([]);
         setErrorMsg("Please sign in to load your sessions.");
-        try { navigation.navigate("Login"); } catch {}
+        try {
+          navigation.navigate("Login");
+        } catch {}
         return;
       }
-      const url = `${resolveBaseURL()}/users/${encodeURIComponent(userId)}/training-programs`;
+      const url = `${resolveBaseURL()}/users/${encodeURIComponent(
+        userId
+      )}/training-programs`;
       const res = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
@@ -178,8 +211,8 @@ export default function Sessions({ navigation, route }) {
       const data = await res.json();
       // Try to find a current program object (API may return the program object directly OR an array)
       const program = Array.isArray(data)
-        ? (data[0] || null)
-        : (data?.currentProgram || data?.program || data || null);
+        ? data[0] || null
+        : data?.currentProgram || data?.program || data || null;
       if (!program) {
         setNoProgram(true);
         setWeeksData([]);
@@ -193,7 +226,12 @@ export default function Sessions({ navigation, route }) {
         return;
       }
       setWeeksData(weeks);
-      console.log("[Sessions] loaded program:", program?.name || program?.slug || "(unnamed)", "weeks:", weeks.length);
+      console.log(
+        "[Sessions] loaded program:",
+        program?.name || program?.slug || "(unnamed)",
+        "weeks:",
+        weeks.length
+      );
     } catch (err) {
       console.log("[Sessions] fetch error:", err);
       setErrorMsg(err?.message || "Failed to load training program.");
@@ -202,14 +240,13 @@ export default function Sessions({ navigation, route }) {
       setLoading(false);
     }
   }, [user, navigation, route]);
-  
+
   useFocusEffect(
     useCallback(() => {
       fetchProgram();
       return () => {};
     }, [fetchProgram])
   );
-
 
   const progressBarHeight = 16;
   const progressBarWidth = Math.min(240, Math.max(160, width * 0.55));
@@ -228,7 +265,9 @@ export default function Sessions({ navigation, route }) {
     // animated values for each day row (0 = hidden, 1 = shown)
     const dayAnims = useRef(
       Array.from(
-        { length: Array.isArray(item?.days) ? item.days.length : item.totalDays },
+        {
+          length: Array.isArray(item?.days) ? item.days.length : item.totalDays,
+        },
         () => new Animated.Value(0)
       )
     ).current;
@@ -239,7 +278,7 @@ export default function Sessions({ navigation, route }) {
 
     const shimmerTranslate = shimmerAnim.interpolate({
       inputRange: [0, 1],
-      outputRange: [-(progressBarWidth), progressBarWidth],
+      outputRange: [-progressBarWidth, progressBarWidth],
     });
 
     useEffect(() => {
@@ -295,16 +334,14 @@ export default function Sessions({ navigation, route }) {
 
       const hide = Animated.stagger(
         60,
-        [...dayAnims]
-          .reverse()
-          .map((v) =>
-            Animated.timing(v, {
-              toValue: 0,
-              duration: 240, // slightly slower fade out
-              easing: Easing.in(Easing.cubic),
-              useNativeDriver: true,
-            })
-          )
+        [...dayAnims].reverse().map((v) =>
+          Animated.timing(v, {
+            toValue: 0,
+            duration: 240, // slightly slower fade out
+            easing: Easing.in(Easing.cubic),
+            useNativeDriver: true,
+          })
+        )
       );
 
       if (expanded) {
@@ -318,14 +355,25 @@ export default function Sessions({ navigation, route }) {
       <>
         <Pressable
           onPress={() => setExpanded((prev) => !prev)}
-          style={[tw`flex-row items-center justify-between mb-12`, { width: "100%", paddingHorizontal: 4 }]}
+          style={[
+            tw`flex-row items-center justify-between mb-12`,
+            { width: "100%", paddingHorizontal: 4 },
+          ]}
         >
           <View style={tw`flex-row items-center`}>
             <Pressable
               onPress={() => setExpanded((prev) => !prev)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={[tw`text-2xl font-bold`, { color: "#0E0E0E", fontFamily: "Joan" }]}> {`Week ${item.week}`} </Text>
+              <Text
+                style={[
+                  tw`text-2xl font-bold`,
+                  { color: "#0E0E0E", fontFamily: "Joan" },
+                ]}
+              >
+                {" "}
+                {`Week ${item.week}`}{" "}
+              </Text>
             </Pressable>
             <Pressable
               onPress={() => setExpanded((prev) => !prev)}
@@ -337,7 +385,10 @@ export default function Sessions({ navigation, route }) {
                   fontSize: 16,
                   transform: [
                     {
-                      rotate: caretAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] }),
+                      rotate: caretAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ["0deg", "180deg"],
+                      }),
                     },
                   ],
                 }}
@@ -363,28 +414,60 @@ export default function Sessions({ navigation, route }) {
               colors={["#87DAF0", "#355D73"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, opacity: 0.35, borderRadius: 999 }}
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                opacity: 0.35,
+                borderRadius: 999,
+              }}
             />
 
             {/* animated completed portion */}
             <Animated.View
-              style={{ width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: [0, progressBarWidth] }), height: "100%", overflow: "hidden" }}
+              style={{
+                width: progressAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, progressBarWidth],
+                }),
+                height: "100%",
+                overflow: "hidden",
+              }}
             >
               <LinearGradient
                 colors={["#87DAF0", "#355D73"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                }}
               />
             </Animated.View>
 
             {/* shimmering sweep */}
             <Animated.View
               pointerEvents="none"
-              style={{ position: "absolute", top: 0, bottom: 0, width: 120, opacity: 0.6, transform: [{ translateX: shimmerTranslate }] }}
+              style={{
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                width: 120,
+                opacity: 0.6,
+                transform: [{ translateX: shimmerTranslate }],
+              }}
             >
               <LinearGradient
-                colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.65)", "rgba(255,255,255,0)"]}
+                colors={[
+                  "rgba(255,255,255,0)",
+                  "rgba(255,255,255,0.65)",
+                  "rgba(255,255,255,0)",
+                ]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={{ flex: 1 }}
@@ -396,20 +479,46 @@ export default function Sessions({ navigation, route }) {
           <View style={[tw`mt-3 mb-6`, { paddingLeft: 4, paddingRight: 8 }]}>
             {(Array.isArray(item?.days)
               ? item.days
-              : Array.from({ length: item.totalDays }).map((_, i) => ({ title: `Day ${i + 1}`, completed: i < item.completedDays }))
+              : Array.from({ length: item.totalDays }).map((_, i) => ({
+                  title: `Day ${i + 1}`,
+                  completed: i < item.completedDays,
+                }))
             ).map((d, i) => {
               const a = dayAnims[i];
-              const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [8, 0] });
-              const isDone = typeof d?.completed === "boolean" ? d.completed : i < item.completedDays;
+              const translateY = a.interpolate({
+                inputRange: [0, 1],
+                outputRange: [8, 0],
+              });
+              const isDone =
+                typeof d?.completed === "boolean"
+                  ? d.completed
+                  : i < item.completedDays;
               return (
                 <Animated.View
                   key={i}
-                  style={[tw`flex-row items-center justify-start py-1`, { opacity: a, transform: [{ translateY }] }]}
+                  style={[
+                    tw`flex-row items-center justify-start py-1`,
+                    { opacity: a, transform: [{ translateY }] },
+                  ]}
                 >
-                  <Text style={[tw`mr-2`, { opacity: isDone ? 1 : 0.4, fontSize: 22, color: "#E6B82C" }]}>
+                  <Text
+                    style={[
+                      tw`mr-2`,
+                      {
+                        opacity: isDone ? 1 : 0.4,
+                        fontSize: 22,
+                        color: "#E6B82C",
+                      },
+                    ]}
+                  >
                     {isDone ? "✓" : "○"}
                   </Text>
-                  <Text style={[tw`text-base`, { color: "#0E0E0E", fontFamily: "Joan", fontSize: 18 }]}>
+                  <Text
+                    style={[
+                      tw`text-base`,
+                      { color: "#0E0E0E", fontFamily: "Joan", fontSize: 18 },
+                    ]}
+                  >
                     {d?.title || `Day ${i + 1}`}
                   </Text>
                 </Animated.View>
@@ -423,9 +532,16 @@ export default function Sessions({ navigation, route }) {
 
   if (loading) {
     return (
-      <SafeAreaView style={[tw`flex-1 items-center justify-center`, { backgroundColor: "#A4A4A4" }]}>
+      <SafeAreaView
+        style={[
+          tw`flex-1 items-center justify-center`,
+          { backgroundColor: "#A4A4A4" },
+        ]}
+      >
         <ActivityIndicator size="large" />
-        <Text style={[tw`mt-3`, { color: "#0E0E0E" }]}>Loading your training program…</Text>
+        <Text style={[tw`mt-3`, { color: "#0E0E0E" }]}>
+          Loading your training program…
+        </Text>
       </SafeAreaView>
     );
   }
@@ -433,20 +549,42 @@ export default function Sessions({ navigation, route }) {
   if (noProgram || weeksData.length === 0) {
     return (
       <SafeAreaView
-        style={[tw`flex-1 items-center justify-center px-6`, { backgroundColor: "#A4A4A4" }]}
+        style={[
+          tw`flex-1 items-center justify-center px-6`,
+          { backgroundColor: "#A4A4A4" },
+        ]}
         {...panResponder.panHandlers}
       >
-        <Text style={[tw`text-center mb-4`, { color: "#0E0E0E", fontSize: 18, fontFamily: "Joan" }]}>
+        <Text
+          style={[
+            tw`text-center mb-4`,
+            { color: "#0E0E0E", fontSize: 18, fontFamily: "Joan" },
+          ]}
+        >
           You’re not enrolled in a training program yet.
         </Text>
         {Boolean(errorMsg) && (
-          <Text style={[tw`text-center mb-4`, { color: "#333" }]}>{errorMsg}</Text>
+          <Text style={[tw`text-center mb-4`, { color: "#333" }]}>
+            {errorMsg}
+          </Text>
         )}
         <TouchableOpacity
           onPress={() => navigation.navigate("Home")}
-          style={{ backgroundColor: "#E6B82C", paddingVertical: 10, paddingHorizontal: 22, borderRadius: 20 }}
+          style={{
+            backgroundColor: "#E6B82C",
+            paddingVertical: 10,
+            paddingHorizontal: 22,
+            borderRadius: 20,
+          }}
         >
-          <Text style={{ color: "#000", fontSize: 18, fontFamily: "Joan", fontWeight: "600" }}>
+          <Text
+            style={{
+              color: "#000",
+              fontSize: 18,
+              fontFamily: "Joan",
+              fontWeight: "600",
+            }}
+          >
             Go Home and Enroll
           </Text>
         </TouchableOpacity>
@@ -454,7 +592,7 @@ export default function Sessions({ navigation, route }) {
     );
   }
 
-return (
+  return (
     <SafeAreaView
       style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}
       {...panResponder.panHandlers}
@@ -467,8 +605,7 @@ return (
           contentContainerStyle={tw`flex-grow`}
           keyboardShouldPersistTaps="handled"
         >
-
-{/* outer centered container with max width */}
+          {/* outer centered container with max width */}
           <View style={[tw`flex-1 items-center`, { paddingHorizontal: 16 }]}>
             <View
               style={{
@@ -481,7 +618,7 @@ return (
               <Text
                 style={[
                   tw`mb-6 text-center text-5xl`,
-                  { color: "#87DAF0", fontFamily: "Joan"},
+                  { color: "#87DAF0", fontFamily: "Joan" },
                 ]}
               >
                 Train
@@ -492,11 +629,13 @@ return (
                 {weeksData.length > 0 ? (
                   weeksData.map((w) => <WeekRow key={w.week} item={w} />)
                 ) : (
-                  <Text style={[tw`mt-4`, { color: "#0E0E0E" }]}>No weeks to display.</Text>
+                  <Text style={[tw`mt-4`, { color: "#0E0E0E" }]}>
+                    No weeks to display.
+                  </Text>
                 )}
               </View>
 
-  <TouchableOpacity
+              <TouchableOpacity
                 onPress={() => Alert.alert("Button pressed")}
                 style={{
                   backgroundColor: "#E6B82C",
@@ -521,21 +660,10 @@ return (
                   Begin Today's Session
                 </Text>
               </TouchableOpacity>
-
-
-
-              
-              </View>
-              </View>
-
-
-
-
-
-
+            </View>
+          </View>
         </ScrollView>
-        </KeyboardAvoidingView>
-        </SafeAreaView>
-)
-
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
 }

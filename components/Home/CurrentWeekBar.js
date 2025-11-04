@@ -1,7 +1,48 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Animated, Easing, Platform } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+
 import * as SecureStore from "expo-secure-store";
+
+// --- helpers: normalize a program into weeks with days and compute counts ---
+const deriveWeeksFromProgram = (programLike, fallbackDuration) => {
+  if (!programLike) return [];
+  // 1) direct weeks
+  if (Array.isArray(programLike.weeks)) {
+    return programLike.weeks.map((w) => ({
+      days: Array.isArray(w?.days) ? w.days : [],
+      totalDays: Number(w?.totalDays) || (Array.isArray(w?.days) ? w.days.length : 0),
+      completedDays:
+        Number(w?.completedDays) ||
+        (Array.isArray(w?.days) ? w.days.filter((d) => d?.completed || d?.done || d?.status === "done").length : 0),
+    }));
+  }
+  // 2) workouts grouped by weekIndex → build weeks with days
+  if (Array.isArray(programLike.workouts)) {
+    const grouped = {};
+    for (const wk of programLike.workouts) {
+      const wi = Number(wk.weekIndex ?? wk.week ?? 0);
+      const days = Array.isArray(wk.days) ? wk.days : [];
+      if (!grouped[wi]) grouped[wi] = [];
+      grouped[wi].push(...days);
+    }
+    const indexes = Object.keys(grouped).map((n) => Number(n)).sort((a, b) => a - b);
+    return indexes.map((i) => {
+      const days = grouped[i] || [];
+      return {
+        days,
+        totalDays: days.length,
+        completedDays: days.filter((d) => d?.completed || d?.done || d?.status === "done").length,
+      };
+    });
+  }
+  // 3) duration fallback
+  const dur = Number(programLike.duration ?? fallbackDuration ?? 0);
+  if (dur > 0) {
+    return Array.from({ length: dur }, () => ({ days: [], totalDays: 0, completedDays: 0 }));
+  }
+  return [];
+};
 
 /**
  * ProgressBar
@@ -35,32 +76,47 @@ export default function ProgressBar({ width = 300 }) {
           setProgress(0);
           return;
         }
+        const token = await SecureStore.getItemAsync("authToken");
         const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
-        const res = await fetch(`${baseURL}/users/${storedId}`);
+        const res = await fetch(`${baseURL}/users/${storedId}/training-programs`, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
         if (!res.ok) {
           setNoProgram(true);
           setProgress(0);
           return;
         }
         const data = await res.json();
-        if (!data || !Array.isArray(data.trainingPrograms) || data.trainingPrograms.length === 0) {
+        // API may return a single program object OR an array
+        const program = Array.isArray(data) ? data[0] : data;
+        if (!program) {
           setNoProgram(true);
           setProgress(0);
           return;
         }
-        const current = data.trainingPrograms[0];
-        const weeks = current.weeks || [];
-        const totals = weeks.reduce(
-          (acc, w) => {
-            const td = Number(w.totalDays) || 0;
-            const cd = Number(w.completedDays) || 0;
-            acc.total += td;
-            acc.done += Math.min(cd, td);
-            return acc;
-          },
-          { total: 0, done: 0 }
-        );
-        const ratio = totals.total > 0 ? totals.done / totals.total : 0;
+        const weeks = deriveWeeksFromProgram(program, program?.duration);
+        if (!weeks.length) {
+          setNoProgram(true);
+          setProgress(0);
+          return;
+        }
+        // Find current week: first week that's not fully complete; otherwise last week
+        let currentIndex = 0;
+        for (let i = 0; i < weeks.length; i++) {
+          const w = weeks[i];
+          const td = Number(w.totalDays) || (Array.isArray(w.days) ? w.days.length : 0);
+          const cd = Number(w.completedDays) || 0;
+          if (td === 0) { currentIndex = i; break; }
+          if (cd < td) { currentIndex = i; break; }
+          if (i === weeks.length - 1) currentIndex = i;
+        }
+        const current = weeks[currentIndex];
+        const totalDays = Number(current.totalDays) || (Array.isArray(current.days) ? current.days.length : 0);
+        const completedDays = Number(current.completedDays) || 0;
+        const ratio = totalDays > 0 ? Math.max(0, Math.min(1, completedDays / totalDays)) : 0;
         setNoProgram(false);
         setProgress(ratio);
       } catch (e) {
