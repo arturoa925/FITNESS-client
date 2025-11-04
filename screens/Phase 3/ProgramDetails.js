@@ -23,8 +23,6 @@ import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 
-
-
 export default function ProgramDetails({ navigation, route }) {
   const { width, height, fontScale } = useWindowDimensions();
   const isNarrow = width < 360;
@@ -36,20 +34,28 @@ export default function ProgramDetails({ navigation, route }) {
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
 
   // Params from navigation
-  const { programName, program, noProgram, message } = (route && route.params) || {};
+  const { programName, program, noProgram, message } =
+    (route && route.params) || {};
   const [title, setTitle] = useState(programName || "Program Details");
 
   // Normalized weeks → days → workouts for centered column display
   const [weeks, setWeeks] = useState([]);
+
+  const [submitting, setSubmitting] = useState(false);
 
   const formatWorkoutLabel = (w) => {
     // Build a concise label from known fields; fall back to name
     if (!w) return "";
     if (w.distanceKm) return `${w.name || "Run"} · ${w.distanceKm} km`;
     if (w.distanceM) return `${w.name || "Run"} · ${w.distanceM} m`;
-    if (w.durationSec && w.sets) return `${w.name || "Intervals"} · ${w.sets}×${Math.round(w.durationSec/60)} min`;
-    if (w.durationSec) return `${w.name || "Session"} · ${Math.round(w.durationSec/60)} min`;
-    if (w.sets && w.reps) return `${w.name || "Strength"} · ${w.sets}×${w.reps}`;
+    if (w.durationSec && w.sets)
+      return `${w.name || "Intervals"} · ${w.sets}×${Math.round(
+        w.durationSec / 60
+      )} min`;
+    if (w.durationSec)
+      return `${w.name || "Session"} · ${Math.round(w.durationSec / 60)} min`;
+    if (w.sets && w.reps)
+      return `${w.name || "Strength"} · ${w.sets}×${w.reps}`;
     return w.name || "Workout";
   };
 
@@ -58,15 +64,20 @@ export default function ProgramDetails({ navigation, route }) {
     const n = ex.name || "Exercise";
     if (ex.distanceKm) return `${n} — ${ex.distanceKm} km`;
     if (ex.distanceM) return `${n} — ${ex.distanceM} m`;
-    if (ex.durationSec && ex.sets) return `${n} — ${ex.sets}×${Math.round(ex.durationSec/60)} min`;
-    if (ex.durationSec) return `${n} — ${Math.round(ex.durationSec/60)} min`;
+    if (ex.durationSec && ex.sets)
+      return `${n} — ${ex.sets}×${Math.round(ex.durationSec / 60)} min`;
+    if (ex.durationSec) return `${n} — ${Math.round(ex.durationSec / 60)} min`;
     if (ex.sets && ex.reps) return `${n} — ${ex.sets}×${ex.reps}`;
     return n;
   };
 
   const normalizeWeeks = useCallback((p) => {
     if (!p) return [];
-    const src = Array.isArray(p.weeks) ? p.weeks : Array.isArray(p.workouts) ? p.workouts : [];
+    const src = Array.isArray(p.weeks)
+      ? p.weeks
+      : Array.isArray(p.workouts)
+      ? p.workouts
+      : [];
     return src.map((w, wi) => {
       const weekNumber =
         (typeof w.week === "number" && w.week) ||
@@ -81,7 +92,11 @@ export default function ProgramDetails({ navigation, route }) {
             const dayWorkouts = Array.isArray(d.workouts) ? d.workouts : [];
             // Each day workout may itself contain exercises; prefer the workout's name
             const workouts = dayWorkouts.map((dw) => {
-              const wName = dw.name || (Array.isArray(dw.exercises) && dw.exercises[0] ? formatWorkoutLabel(dw.exercises[0]) : formatWorkoutLabel(dw));
+              const wName =
+                dw.name ||
+                (Array.isArray(dw.exercises) && dw.exercises[0]
+                  ? formatWorkoutLabel(dw.exercises[0])
+                  : formatWorkoutLabel(dw));
               const exercises = Array.isArray(dw.exercises)
                 ? dw.exercises.map((ex) => formatExerciseLabel(ex))
                 : [];
@@ -122,10 +137,11 @@ export default function ProgramDetails({ navigation, route }) {
       onPanResponderRelease: (_evt, gesture) => {
         const { dx, vx, dy, x0 } = gesture;
         const startedAtEdge = x0 <= 32;
-        const movedRightEnough = dx > 50;     // distance
+        const movedRightEnough = dx > 50; // distance
         const horizontalEnough = Math.abs(dx) > Math.abs(dy);
-        const fastEnough = vx > 0.1;          // velocity
-        const isRightSwipe = startedAtEdge && movedRightEnough && horizontalEnough && fastEnough;
+        const fastEnough = vx > 0.1; // velocity
+        const isRightSwipe =
+          startedAtEdge && movedRightEnough && horizontalEnough && fastEnough;
         if (isRightSwipe && !swipeHandledRef.current) {
           swipeHandledRef.current = true;
           try {
@@ -140,6 +156,86 @@ export default function ProgramDetails({ navigation, route }) {
       onPanResponderTerminationRequest: () => true,
     })
   ).current;
+
+  const handleBeginPrep = useCallback(async () => {
+    try {
+      setSubmitting(true);
+
+      // Try to resolve the user id from a few places
+      const storedUserId = await SecureStore.getItemAsync("userId");
+      const uid =
+        storedUserId ||
+        program?.userId ||
+        (route && route.params && route.params.userId);
+
+      if (!uid) {
+        Alert.alert("Missing user ID", "Could not determine your user ID.");
+        return;
+      }
+
+      const url = `http://localhost:3004/users/${uid}/program/choose`;
+
+      // Retrieve an auth token (try common keys; adjust if your app uses a different key)
+      const tokenKeys = ["accessToken", "token", "idToken", "jwt", "authToken"];
+      let authToken = null;
+      for (const k of tokenKeys) {
+        const v = await SecureStore.getItemAsync(k);
+        if (v) {
+          authToken = v;
+          break;
+        }
+      }
+      if (!authToken) {
+        Alert.alert(
+          "Not signed in",
+          "Your session token is missing. Please log in again."
+        );
+        try {
+          navigation.navigate("Login");
+        } catch {}
+        return;
+      }
+
+      // Include a program identifier if available; backend can ignore null
+      const payload = {
+        programId: program?.id || program?.programId || null,
+      };
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 401 || res.status === 403) {
+          // Token rejected or missing permissions
+          Alert.alert(
+            "Authentication required",
+            "Your session may have expired. Please sign in again."
+          );
+          try {
+            navigation.navigate("Login");
+          } catch {}
+        }
+        throw new Error(`Request failed (${res.status}): ${text}`);
+      }
+
+      // Try to parse JSON, but tolerate empty body
+      const data = await res.json().catch(() => null);
+
+      Alert.alert("Subscribed", "Your training program has been selected.");
+      navigation.replace("Home", { refreshed: true, subscription: data });
+    } catch (err) {
+      Alert.alert("Subscription failed", String(err?.message || err));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [navigation, program, route]);
 
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
@@ -176,15 +272,42 @@ export default function ProgramDetails({ navigation, route }) {
 
             {/* Not enrolled / error message */}
             {noProgram ? (
-              <View style={{ width: maxWidth, alignSelf: "center", marginBottom: 24 }}>
-                <Text style={{ color: "#000", fontFamily: "Joan", fontSize: 18, textAlign: "center", marginBottom: 12 }}>
+              <View
+                style={{
+                  width: maxWidth,
+                  alignSelf: "center",
+                  marginBottom: 24,
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#000",
+                    fontFamily: "Joan",
+                    fontSize: 18,
+                    textAlign: "center",
+                    marginBottom: 12,
+                  }}
+                >
                   {message || "You’re not enrolled in a training program yet."}
                 </Text>
                 <TouchableOpacity
                   onPress={() => navigation.navigate("Home")}
-                  style={{ backgroundColor: "#E6B82C", paddingVertical: 10, paddingHorizontal: 22, borderRadius: 20, alignSelf: "center" }}
+                  style={{
+                    backgroundColor: "#E6B82C",
+                    paddingVertical: 10,
+                    paddingHorizontal: 22,
+                    borderRadius: 20,
+                    alignSelf: "center",
+                  }}
                 >
-                  <Text style={{ color: "#000", fontSize: 18, fontFamily: "Joan", fontWeight: "600" }}>
+                  <Text
+                    style={{
+                      color: "#000",
+                      fontSize: 18,
+                      fontFamily: "Joan",
+                      fontWeight: "600",
+                    }}
+                  >
                     Go Home and Enroll
                   </Text>
                 </TouchableOpacity>
@@ -193,7 +316,13 @@ export default function ProgramDetails({ navigation, route }) {
 
             {/* Weeks → Days → Workouts (centered column) */}
             {weeks.length > 0 && !noProgram ? (
-              <View style={{ width: maxWidth, alignSelf: "center", marginBottom: 24 }}>
+              <View
+                style={{
+                  width: maxWidth,
+                  alignSelf: "center",
+                  marginBottom: 24,
+                }}
+              >
                 {weeks.map((wk) => (
                   <View
                     key={`week-${wk.week}`}
@@ -206,31 +335,72 @@ export default function ProgramDetails({ navigation, route }) {
                       borderColor: "rgba(0,0,0,0.08)",
                     }}
                   >
-                    <View style={{ paddingVertical: 12, paddingHorizontal: 16, backgroundColor: "#EEE" }}>
-                      <Text style={{ color: "#0E0E0E", fontFamily: "Joan", fontSize: 20, textAlign: "center" }}>
+                    <View
+                      style={{
+                        paddingVertical: 12,
+                        paddingHorizontal: 16,
+                        backgroundColor: "#EEE",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#0E0E0E",
+                          fontFamily: "Joan",
+                          fontSize: 20,
+                          textAlign: "center",
+                        }}
+                      >
                         {`Week ${wk.week}`}
                       </Text>
                     </View>
 
                     <View style={{ paddingVertical: 8 }}>
                       {wk.days.map((day) => (
-                        <View key={`w${wk.week}-d${day.dayIndex}`} style={{ paddingVertical: 10, paddingHorizontal: 16 }}>
-                          <Text style={{ color: "#0E0E0E", fontFamily: "Joan", fontSize: 18, textAlign: "center" }}>
+                        <View
+                          key={`w${wk.week}-d${day.dayIndex}`}
+                          style={{ paddingVertical: 10, paddingHorizontal: 16 }}
+                        >
+                          <Text
+                            style={{
+                              color: "#0E0E0E",
+                              fontFamily: "Joan",
+                              fontSize: 18,
+                              textAlign: "center",
+                            }}
+                          >
                             {day.title}
                           </Text>
-                          {Array.isArray(day.workouts) && day.workouts.length > 0 ? (
+                          {Array.isArray(day.workouts) &&
+                          day.workouts.length > 0 ? (
                             <View style={{ marginTop: 6 }}>
                               {day.workouts.map((w, wi) => (
-                                <View key={`w${wk.week}-d${day.dayIndex}-workout-${wi}`} style={{ marginTop: wi === 0 ? 0 : 6 }}>
-                                  <Text style={{ color: "#333", fontFamily: "Joan", fontSize: 16, textAlign: "center" }}>
+                                <View
+                                  key={`w${wk.week}-d${day.dayIndex}-workout-${wi}`}
+                                  style={{ marginTop: wi === 0 ? 0 : 6 }}
+                                >
+                                  <Text
+                                    style={{
+                                      color: "#333",
+                                      fontFamily: "Joan",
+                                      fontSize: 16,
+                                      textAlign: "center",
+                                    }}
+                                  >
                                     {w.name}
                                   </Text>
-                                  {Array.isArray(w.exercises) && w.exercises.length > 0 ? (
+                                  {Array.isArray(w.exercises) &&
+                                  w.exercises.length > 0 ? (
                                     <View style={{ marginTop: 4 }}>
                                       {w.exercises.map((label, ei) => (
                                         <Text
                                           key={`w${wk.week}-d${day.dayIndex}-ex-${ei}`}
-                                          style={{ color: "#444", fontFamily: "Manrope", fontSize: 14, textAlign: "center", marginTop: 2 }}
+                                          style={{
+                                            color: "#444",
+                                            fontFamily: "Manrope",
+                                            fontSize: 14,
+                                            textAlign: "center",
+                                            marginTop: 2,
+                                          }}
                                         >
                                           {label}
                                         </Text>
@@ -248,39 +418,45 @@ export default function ProgramDetails({ navigation, route }) {
                 ))}
               </View>
             ) : !noProgram ? (
-              <Text style={{ color: "#000", fontFamily: "Joan", fontSize: 18, textAlign: "center", marginVertical: 24 }}>
+              <Text
+                style={{
+                  color: "#000",
+                  fontFamily: "Joan",
+                  fontSize: 18,
+                  textAlign: "center",
+                  marginVertical: 24,
+                }}
+              >
                 No program structure to display.
               </Text>
             ) : null}
 
-
             {/* Done button */}
             <TouchableOpacity
-                              onPress={() => {
-                                navigation.replace("Home");
-                                Alert.alert("Button pressed")}}
-                              style={{
-                                backgroundColor: "#E6B82C",
-                                paddingVertical: 10,
-                                paddingHorizontal: 22,
-                                borderRadius: 20,
-                                minWidth: 110,
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                            >
-                              <Text
-                                style={{
-                                  color: "#000",
-                                  fontSize: 24,
-                                  fontFamily: "Joan",
-                                  fontWeight: "600",
-                                }}
-                               
-                              >
-                              Begin Prep
-                              </Text>
-                            </TouchableOpacity>
+              onPress={handleBeginPrep}
+              disabled={submitting}
+              style={{
+                backgroundColor: "#E6B82C",
+                paddingVertical: 10,
+                paddingHorizontal: 22,
+                borderRadius: 20,
+                minWidth: 110,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: submitting ? 0.6 : 1,
+              }}
+            >
+              <Text
+                style={{
+                  color: "#000",
+                  fontSize: 24,
+                  fontFamily: "Joan",
+                  fontWeight: "600",
+                }}
+              >
+                {submitting ? "Working..." : "Begin Prep"}
+              </Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

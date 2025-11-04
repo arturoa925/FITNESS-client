@@ -25,7 +25,59 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Calendar } from "react-native-calendars";
 import { Picker } from "@react-native-picker/picker";
 import { TouchableWithoutFeedback } from "react-native";
+
 import { FlatList } from "react-native";
+
+// Normalize weeks from different backend shapes
+const deriveWeeksFromProgram = (programLike, fallbackDuration) => {
+  if (!programLike) return [];
+  // 1) Native weeks array
+  if (Array.isArray(programLike.weeks)) return programLike.weeks;
+  // 2) Workouts grouped by weekIndex → build weeks with days
+  if (Array.isArray(programLike.workouts)) {
+    const grouped = {};
+    for (const w of programLike.workouts) {
+      const wi = Number(w.weekIndex ?? w.week ?? 0);
+      if (!grouped[wi]) grouped[wi] = [];
+      const days = Array.isArray(w.days) ? w.days : [];
+      grouped[wi].push(...days);
+    }
+    // Convert grouped map to ordered weeks [{ days: [...] }, ...]
+    const weekIndexes = Object.keys(grouped)
+      .map((n) => Number(n))
+      .sort((a, b) => a - b);
+    return weekIndexes.map((i) => ({ days: grouped[i] }));
+  }
+  // 3) Duration fallback → create empty weeks
+  const dur = Number(programLike.duration ?? fallbackDuration ?? 0);
+  if (dur > 0) {
+    return Array.from({ length: dur }, () => ({ days: [] }));
+  }
+  return [];
+};
+
+// Retrieve the user's current training program (requires auth token)
+const fetchCurrentProgram = async (userId, token, baseURL) => {
+  if (!userId || !token) return null;
+  try {
+    const res = await fetch(`${baseURL}/users/${userId}/training-programs`, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      console.warn("[fetchCurrentProgram] failed:", res.status);
+      return null;
+    }
+    const data = await res.json();
+    if (Array.isArray(data) && data.length) return data[0];
+    return data;
+  } catch (err) {
+    console.error("[fetchCurrentProgram] error:", err);
+    return null;
+  }
+};
 
 // * user context
 import { useUser } from "../../components/UserContext";
@@ -35,7 +87,7 @@ import ProfileAvatarMenu from "../../components/Home/ProfilePic";
 import ProgressBar from "../../components/Home/CurrentWeekBar";
 import CalendarFoodLog from "../../components/Home/Calendar";
 
-export default function Home({ navigation }) {
+export default function Home({ navigation, route }) {
   const { width, height, fontScale } = useWindowDimensions();
   const isNarrow = width < 360;
   const isShort = height < 700;
@@ -80,48 +132,141 @@ export default function Home({ navigation }) {
     }
   };
 
-  const [weekInfo, setWeekInfo] = useState({ current: null, total: null, noProgram: false });
+  const [weekInfo, setWeekInfo] = useState({
+    current: null,
+    total: null,
+    noProgram: false,
+  });
 
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
       (async () => {
+        // If we were navigated here with a fresh subscription/program payload, update immediately
+        try {
+          const sub = route?.params?.subscription;
+          if (sub) {
+            const programFromSub =
+              sub?.trainingProgram ||
+              sub?.program ||
+              (Array.isArray(sub?.trainingPrograms)
+                ? sub.trainingPrograms[0]
+                : null) ||
+              null;
+            const weeksArrSub =
+              deriveWeeksFromProgram(
+                programFromSub,
+                programFromSub?.duration
+              ) || (Array.isArray(sub?.weeks) ? sub.weeks : []);
+            const totalWeeksSub =
+              weeksArrSub.length || Number(programFromSub?.duration) || 0;
+            if (totalWeeksSub > 0) {
+              const completedWeeksSub = weeksArrSub.reduce((acc, w) => {
+                const daysArr = Array.isArray(w?.days)
+                  ? w.days
+                  : Array.isArray(w)
+                  ? w
+                  : [];
+                const td = Number(w.totalDays) || daysArr.length;
+                const cd =
+                  Number(w.completedDays) ||
+                  daysArr.filter(
+                    (d) => d?.completed || d?.done || d?.status === "done"
+                  ).length;
+                return acc + (td > 0 && cd >= td ? 1 : 0);
+              }, 0);
+              const currentWeekSub = Math.min(
+                totalWeeksSub,
+                completedWeeksSub + 1
+              );
+              if (isActive)
+                setWeekInfo({
+                  current: currentWeekSub,
+                  total: totalWeeksSub,
+                  noProgram: false,
+                });
+            }
+          }
+        } catch {}
         try {
           const storedId = await SecureStore.getItemAsync("userId");
           if (!storedId) {
-            if (isActive) setWeekInfo({ current: null, total: null, noProgram: true });
+            if (isActive)
+              setWeekInfo({ current: null, total: null, noProgram: true });
             return;
           }
-          const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
-          const res = await fetch(`${baseURL}/users/${storedId}`);
+          const baseURL =
+            Platform.OS === "android"
+              ? "http://10.0.2.2:3004"
+              : "http://localhost:3004";
+          const token = await SecureStore.getItemAsync("authToken");
+          const res = await fetch(`${baseURL}/users/${storedId}`, {
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          });
           if (!res.ok) {
-            if (isActive) setWeekInfo({ current: null, total: null, noProgram: true });
+            if (isActive)
+              setWeekInfo({ current: null, total: null, noProgram: true });
             return;
           }
           const data = await res.json();
           // Resolve program and weeks from common shapes
-          const program = (data?.trainingPrograms && data.trainingPrograms[0]) || data?.currentProgram || data?.program || null;
-          const weeksArr = Array.isArray(program?.weeks) ? program.weeks : Array.isArray(data?.weeks) ? data.weeks : [];
-          const totalWeeks = weeksArr.length;
+          let program =
+            (Array.isArray(data?.trainingPrograms) &&
+              data.trainingPrograms[0]) ||
+            data?.currentProgram ||
+            data?.program ||
+            null;
+          if (!program) {
+            program = await fetchCurrentProgram(storedId, token, baseURL);
+          }
+          console.log(
+            "[Home] current program source:",
+            program?.name || program?.slug || "(none)"
+          );
+          const weeksArr =
+            deriveWeeksFromProgram(program, program?.duration) ||
+            (Array.isArray(data?.weeks) ? data.weeks : []);
+          const totalWeeks = weeksArr.length || Number(program?.duration) || 0;
           if (!program || totalWeeks === 0) {
-            if (isActive) setWeekInfo({ current: null, total: null, noProgram: true });
+            if (isActive)
+              setWeekInfo({ current: null, total: null, noProgram: true });
             return;
           }
           // Count fully completed weeks
           const completedWeeks = weeksArr.reduce((acc, w) => {
-            const td = Number(w.totalDays) || (Array.isArray(w.days) ? w.days.length : 0);
-            const cd = Number(w.completedDays) || (Array.isArray(w?.days) ? w.days.filter(d => d?.completed || d?.done || d?.status === "done").length : 0);
+            const daysArr = Array.isArray(w?.days)
+              ? w.days
+              : Array.isArray(w)
+              ? w
+              : [];
+            const td = Number(w.totalDays) || daysArr.length;
+            const cd =
+              Number(w.completedDays) ||
+              daysArr.filter(
+                (d) => d?.completed || d?.done || d?.status === "done"
+              ).length;
             return acc + (td > 0 && cd >= td ? 1 : 0);
           }, 0);
           // Current week is the next one in progress
           const currentWeek = Math.min(totalWeeks, completedWeeks + 1);
-          if (isActive) setWeekInfo({ current: currentWeek, total: totalWeeks, noProgram: false });
+          if (isActive)
+            setWeekInfo({
+              current: currentWeek,
+              total: totalWeeks,
+              noProgram: false,
+            });
         } catch (e) {
           console.log("[Home] week fetch error:", e);
-          if (isActive) setWeekInfo({ current: null, total: null, noProgram: true });
+          if (isActive)
+            setWeekInfo({ current: null, total: null, noProgram: true });
         }
       })();
-      return () => { isActive = false; };
+      return () => {
+        isActive = false;
+      };
     }, [])
   );
 
@@ -134,84 +279,105 @@ export default function Home({ navigation }) {
   };
 
   // Open ProgramDetails for a selected catalog program (from /users/training-programs)
-  const handleOpenCatalogDetails = useCallback(async (label, slug) => {
-    try {
-      const token = await SecureStore.getItemAsync("authToken");
-      const baseURL =
-        Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
-      const res = await fetch(`${baseURL}/users/training-programs`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      if (!res.ok) {
+  const handleOpenCatalogDetails = useCallback(
+    async (label, slug) => {
+      try {
+        const token = await SecureStore.getItemAsync("authToken");
+        const baseURL =
+          Platform.OS === "android"
+            ? "http://10.0.2.2:3004"
+            : "http://localhost:3004";
+        const res = await fetch(`${baseURL}/users/training-programs`, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        if (!res.ok) {
+          navigation.navigate("ProgramDetails", {
+            programName: label || "Program",
+            program: null,
+            noProgram: true,
+            message: "Could not load training programs. Please try again.",
+          });
+          return;
+        }
+        const catalog = await res.json();
+        // Try to match robustly with aliases
+        console.log(
+          "[catalog]",
+          Array.isArray(catalog)
+            ? catalog.map((p) => ({ name: p?.name, slug: p?.slug, id: p?.id }))
+            : catalog
+        );
+        let selected = null;
+        if (Array.isArray(catalog)) {
+          // 1) Exact slug/key/id equality (case-insensitive)
+          if (slug) {
+            const slugLc = String(slug).toLowerCase();
+            selected =
+              catalog.find((p) =>
+                [p?.slug, p?.key, p?.id].some(
+                  (v) => v && String(v).toLowerCase() === slugLc
+                )
+              ) || null;
+          }
+
+          // 2) Exact name equality (case-insensitive)
+          if (!selected && label) {
+            const labelLc = String(label).toLowerCase();
+            selected =
+              catalog.find(
+                (p) =>
+                  typeof p?.name === "string" &&
+                  p.name.toLowerCase() === labelLc
+              ) || null;
+          }
+
+          // 3) Alias-based partial matching (e.g., "Hybrid" → "Hypertrophy Split")
+          if (!selected && label) {
+            const labelLc = String(label).toLowerCase();
+            const aliases = {
+              hybrid: ["hypertrophy", "push", "pull", "split"],
+              marathon: ["marathon", "half marathon"],
+            };
+            const needles = [labelLc, ...(aliases[labelLc] || [])];
+            selected =
+              catalog.find((p) => {
+                const n = (p?.name || "").toLowerCase();
+                return needles.some((k) => k && n.includes(k));
+              }) || null;
+          }
+        }
+        console.log("[selected]", selected?.name, selected?.slug, selected?.id);
+        if (!selected) {
+          navigation.navigate("ProgramDetails", {
+            programName: label || "Program",
+            program: null,
+            noProgram: true,
+            message: "Program not found in catalog.",
+          });
+          return;
+        }
+        // Pass the full selected program; ProgramDetails normalizes (workouts or weeks)
+        navigation.navigate("ProgramDetails", {
+          programName: selected.name || label || "Program",
+          program: selected,
+          noProgram: false,
+          source: "catalog",
+        });
+      } catch (e) {
+        console.log("[Home] handleOpenCatalogDetails error:", e);
         navigation.navigate("ProgramDetails", {
           programName: label || "Program",
           program: null,
           noProgram: true,
-          message: "Could not load training programs. Please try again.",
+          message: "Something went wrong opening Program Details.",
         });
-        return;
       }
-      const catalog = await res.json();
-      // Try to match robustly with aliases
-      console.log("[catalog]", Array.isArray(catalog) ? catalog.map(p => ({ name: p?.name, slug: p?.slug, id: p?.id })) : catalog);
-      let selected = null;
-      if (Array.isArray(catalog)) {
-        // 1) Exact slug/key/id equality (case-insensitive)
-        if (slug) {
-          const slugLc = String(slug).toLowerCase();
-          selected = catalog.find((p) => [p?.slug, p?.key, p?.id].some(v => v && String(v).toLowerCase() === slugLc)) || null;
-        }
-
-        // 2) Exact name equality (case-insensitive)
-        if (!selected && label) {
-          const labelLc = String(label).toLowerCase();
-          selected = catalog.find(p => typeof p?.name === "string" && p.name.toLowerCase() === labelLc) || null;
-        }
-
-        // 3) Alias-based partial matching (e.g., "Hybrid" → "Hypertrophy Split")
-        if (!selected && label) {
-          const labelLc = String(label).toLowerCase();
-          const aliases = {
-            hybrid: ["hypertrophy", "push", "pull", "split"],
-            marathon: ["marathon", "half marathon"],
-          };
-          const needles = [labelLc, ...(aliases[labelLc] || [])];
-          selected = catalog.find(p => {
-            const n = (p?.name || "").toLowerCase();
-            return needles.some(k => k && n.includes(k));
-          }) || null;
-        }
-      }
-      console.log("[selected]", selected?.name, selected?.slug, selected?.id);
-      if (!selected) {
-        navigation.navigate("ProgramDetails", {
-          programName: label || "Program",
-          program: null,
-          noProgram: true,
-          message: "Program not found in catalog.",
-        });
-        return;
-      }
-      // Pass the full selected program; ProgramDetails normalizes (workouts or weeks)
-      navigation.navigate("ProgramDetails", {
-        programName: selected.name || label || "Program",
-        program: selected,
-        noProgram: false,
-        source: "catalog",
-      });
-    } catch (e) {
-      console.log("[Home] handleOpenCatalogDetails error:", e);
-      navigation.navigate("ProgramDetails", {
-        programName: label || "Program",
-        program: null,
-        noProgram: true,
-        message: "Something went wrong opening Program Details.",
-      });
-    }
-  }, [navigation]);
+    },
+    [navigation]
+  );
 
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
@@ -329,7 +495,14 @@ export default function Home({ navigation }) {
               >
                 {/* weeks need to be updated with user data */}
                 <Text
-                  style={[tw`text-3xl`, { color: "black", fontFamily: "Joan", opacity: weekInfo.noProgram ? 0.5 : 1 }]}
+                  style={[
+                    tw`text-3xl`,
+                    {
+                      color: "black",
+                      fontFamily: "Joan",
+                      opacity: weekInfo.noProgram ? 0.5 : 1,
+                    },
+                  ]}
                 >
                   {weekInfo.current && weekInfo.total
                     ? `Week ${weekInfo.current}/${weekInfo.total}`
@@ -390,7 +563,12 @@ export default function Home({ navigation }) {
               </View>
               {/* marathon */}
               <Pressable
-                onPress={() => handleOpenCatalogDetails("Marathon", "half-marathon-8-week-prep")}
+                onPress={() =>
+                  handleOpenCatalogDetails(
+                    "Marathon",
+                    "half-marathon-8-week-prep"
+                  )
+                }
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],
@@ -425,7 +603,9 @@ export default function Home({ navigation }) {
 
               {/* hybrid */}
               <Pressable
-                onPress={() => handleOpenCatalogDetails("Hybrid", "hypertrophy-split")}
+                onPress={() =>
+                  handleOpenCatalogDetails("Hybrid", "hypertrophy-split")
+                }
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],
