@@ -127,6 +127,7 @@ export default function Sessions({ navigation, route }) {
   const [errorMsg, setErrorMsg] = useState("");
   // TEMP: mock training data — this will later be driven by the selected plan
   const [weeksData, setWeeksData] = useState([]);
+  const [program, setProgram] = useState(null);
 
   const { width, height, fontScale } = useWindowDimensions();
   const isNarrow = width < 360;
@@ -172,6 +173,7 @@ export default function Sessions({ navigation, route }) {
               );
         if (rows.length) {
           setWeeksData(rows);
+          if (route?.params?.program) setProgram(route.params.program);
           setNoProgram(false);
           return;
         }
@@ -213,6 +215,7 @@ export default function Sessions({ navigation, route }) {
       const program = Array.isArray(data)
         ? data[0] || null
         : data?.currentProgram || data?.program || data || null;
+      setProgram(program);
       if (!program) {
         setNoProgram(true);
         setWeeksData([]);
@@ -250,6 +253,46 @@ export default function Sessions({ navigation, route }) {
 
   const progressBarHeight = 16;
   const progressBarWidth = Math.min(240, Math.max(160, width * 0.55));
+
+  // Handler to navigate to TodaysSession with the next session details
+  const handleBeginToday = useCallback(() => {
+    try {
+      if (!Array.isArray(weeksData) || weeksData.length === 0) {
+        Alert.alert("No sessions", "No training days found.");
+        return;
+      }
+      let targetWeekIdx = 0;
+      let targetDayIdx = 0;
+      let targetDay = null;
+
+      for (let wi = 0; wi < weeksData.length; wi++) {
+        const w = weeksData[wi];
+        const days = Array.isArray(w?.days)
+          ? w.days
+          : Array.from({ length: w.totalDays }, (_, i) => ({ title: `Day ${i + 1}`, completed: i < (w.completedDays || 0) }));
+
+        let foundDayIndex = days.findIndex((d) => !d?.completed);
+        if (foundDayIndex === -1) foundDayIndex = 0; // if all done, start at first day
+
+        targetWeekIdx = wi;
+        targetDayIdx = foundDayIndex;
+        targetDay = days[foundDayIndex];
+
+        // Choose first week that isn't fully complete; otherwise keep walking to last
+        if ((w.completedDays || 0) < (w.totalDays || days.length || 0)) break;
+      }
+
+      navigation.navigate("TodaysSession", {
+        weekIndex: targetWeekIdx,
+        dayIndex: targetDayIdx,
+        day: targetDay,
+        weeks: weeksData,
+        program: program || route?.params?.program || null,
+      });
+    } catch (e) {
+      Alert.alert("Can't open session", String(e?.message || e));
+    }
+  }, [navigation, weeksData, program, route]);
 
   const getProgress = (completed, total) => {
     if (!total) return 0;
@@ -592,6 +635,7 @@ export default function Sessions({ navigation, route }) {
     );
   }
 
+
   return (
     <SafeAreaView
       style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}
@@ -636,7 +680,7 @@ export default function Sessions({ navigation, route }) {
               </View>
 
               <TouchableOpacity
-                onPress={() => Alert.alert("Button pressed")}
+                onPress={handleBeginToday}
                 style={{
                   backgroundColor: "#E6B82C",
                   paddingVertical: 10,
@@ -646,8 +690,6 @@ export default function Sessions({ navigation, route }) {
                   alignItems: "center",
                   justifyContent: "center",
                 }}
-                // Keep navigation onPress only on TouchableOpacity if desired
-                // onPress={() => navigation.navigate("TodaysSession")}
               >
                 <Text
                   style={{
