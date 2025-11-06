@@ -24,6 +24,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 
 // Reusable exercise card
+
 function ExerciseCard({ exercise, maxWidth }) {
   return (
     <View style={{ width: maxWidth, alignSelf: "center", paddingVertical: 16 }}>
@@ -79,6 +80,7 @@ export default function TodaysSession({ navigation, route }) {
   const [weekNumber, setWeekNumber] = useState(null); // 1-based
   const [dayNumber, setDayNumber] = useState(null);   // 1-based
   const [dayTitle, setDayTitle] = useState("");
+  const [isCompleting, setIsCompleting] = useState(false);
 
   // --- Swipe right to go Home ---
   const swipeHandledRef = useRef(false);
@@ -203,6 +205,183 @@ export default function TodaysSession({ navigation, route }) {
     }
   }, [route?.params]);
 
+  // Mark the workout as completed in the in-memory program (route.params.program) if present.
+  const markLocalCompleted = (program, wi, di, woi) => {
+    try {
+      if (!program || !Array.isArray(program.workouts)) return;
+      const week = program.workouts[wi];
+      if (!week || !Array.isArray(week.days)) return;
+      const day = week.days[di];
+      if (!day || !Array.isArray(day.workouts)) return;
+      const workout = day.workouts[woi];
+      if (!workout) return;
+      day.workouts[woi] = { ...workout, completed: true };
+    } catch {}
+  };
+
+  // Compute the next (weekIndex, dayIndex, workoutIndex) that is NOT completed.
+  // Iterates within day -> next day in week -> next week.
+  const computeNextPointer = (program, wi, di, woi) => {
+    if (!program || !Array.isArray(program.workouts)) return null;
+    const weeks = program.workouts;
+    for (let wIndex = wi; wIndex < weeks.length; wIndex++) {
+      const week = weeks[wIndex];
+      if (!week || !Array.isArray(week.days)) continue;
+      const startDay = (wIndex === wi) ? di : 0;
+      for (let dIndex = startDay; dIndex < week.days.length; dIndex++) {
+        const day = week.days[dIndex];
+        if (!day || !Array.isArray(day.workouts)) continue;
+        const startWorkout = (wIndex === wi && dIndex === di) ? (woi + 1) : 0;
+        for (let wrk = startWorkout; wrk < day.workouts.length; wrk++) {
+          const workout = day.workouts[wrk];
+          if (workout && !workout.completed) {
+            return { weekIndex: wIndex, dayIndex: dIndex, workoutIndex: wrk };
+          }
+        }
+      }
+    }
+    return null;
+  };
+
+  // Resolve userId and programId from params, SecureStore, or API fallbacks
+  const resolveAuthAndProgramIds = async (p, API_BASE, token) => {
+    // Try params first
+    let userId = p?.userId || p?.user?.id || null;
+    let programId = p?.programId || p?.program?.id || null;
+
+    // Try SecureStore (you should be setting these at login)
+    try {
+      if (!userId) {
+        const storedUserId = await SecureStore.getItemAsync("userId");
+        if (storedUserId) userId = storedUserId;
+      }
+      if (!programId) {
+        const storedProgramId = await SecureStore.getItemAsync("programId");
+        if (storedProgramId) programId = storedProgramId;
+      }
+    } catch (_) {}
+
+    // As a last resort, query API for /users/me and /users/:id/training-programs
+    const headers = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    if (!userId) {
+      try {
+        const meRes = await fetch(`${API_BASE}/users/me`, { headers });
+        if (meRes.ok) {
+          const me = await meRes.json();
+          if (me?.id) userId = me.id;
+        }
+      } catch {}
+    }
+
+    if (!programId && userId) {
+      try {
+        const progRes = await fetch(`${API_BASE}/users/${userId}/training-programs`, { headers });
+        if (progRes.ok) {
+          const list = await progRes.json();
+          // accept a single object or array; take the first
+          if (Array.isArray(list) && list.length && list[0]?.id) {
+            programId = list[0].id;
+          } else if (list?.id) {
+            programId = list.id;
+          }
+          // Store for next time
+          try {
+            if (programId) await SecureStore.setItemAsync("programId", String(programId));
+          } catch {}
+        }
+      } catch {}
+    }
+
+    return { userId, programId };
+  };
+
+  const completeCurrentWorkout = async () => {
+    try {
+      if (isCompleting) return;
+      setIsCompleting(true);
+
+      // Pull what we need from route params
+      const p = route?.params || {};
+      const wi = Number.isInteger(p.weekIndex) ? p.weekIndex : 0;
+      const di = Number.isInteger(p.dayIndex) ? p.dayIndex : 0;
+      // Default to first workout if not specified by Sessions
+      const woi = Number.isInteger(p.workoutIndex) ? p.workoutIndex : 0;
+
+      // Temporary debug log for pointers and program presence
+      console.log("[TodaysSession] completing", { wi, di, woi, hasProgram: !!p.program, programWeeks: Array.isArray(p.program?.workouts) ? p.program.workouts.length : null });
+
+      // Program + user (robust resolution)
+      // Token (if you store it in SecureStore)
+      let token = null;
+      try {
+        token = await SecureStore.getItemAsync("authToken");
+      } catch (_) {}
+      // Ensure API_BASE does not include `/api` so the URL is correct.
+      const API_BASE = process.env.EXPO_PUBLIC_API_BASE || "http://localhost:3004";
+      const { userId, programId } = await resolveAuthAndProgramIds(p, API_BASE, token);
+      console.log("[TodaysSession] resolved IDs", { userId, programId });
+
+      if (!programId || !userId) {
+        Alert.alert("Missing info", "Can't complete workout: missing userId or programId.");
+        setIsCompleting(false);
+        return;
+      }
+
+      // Optionally compute a synthetic workoutId (w:week-day-workout)
+      const syntheticId = `w:${wi}-${di}-${woi}`;
+
+      const url = `${API_BASE}/users/${userId}/program/complete`;
+
+      const todayLocal = new Date();
+      const yyyy = todayLocal.getFullYear();
+      const mm = String(todayLocal.getMonth() + 1).padStart(2, "0");
+      const dd = String(todayLocal.getDate()).padStart(2, "0");
+      const effectiveDate = `${yyyy}-${mm}-${dd}`;
+
+      const body = {
+        programId,
+        // Provide both the synthetic id and explicit indices so the server can use either
+        workoutId: syntheticId,
+        weekIndex: wi,
+        dayIndex: di,
+        workoutIndex: woi,
+        date: effectiveDate,
+      };
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `Request failed: ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      // Update local in-memory program to reflect completion (so UI can advance without a refetch)
+      markLocalCompleted(p.program, wi, di, woi);
+
+      // Always go to Home after completion
+      Alert.alert("Workout Complete", `Saved for ${data.date}`);
+      navigation.replace("Home");
+    } catch (e) {
+      console.log("[TodaysSession] completeCurrentWorkout error:", e);
+      Alert.alert("Error", String(e.message || e));
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
       <KeyboardAvoidingView
@@ -257,31 +436,34 @@ export default function TodaysSession({ navigation, route }) {
 
             {/* Done button */}
             <TouchableOpacity
-                              onPress={() => {
-                                navigation.replace("Home");
-                                Alert.alert("Button pressed")}}
-                              style={{
-                                backgroundColor: "#E6B82C",
-                                paddingVertical: 10,
-                                paddingHorizontal: 22,
-                                borderRadius: 20,
-                                minWidth: 110,
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                            >
-                              <Text
-                                style={{
-                                  color: "#000",
-                                  fontSize: 24,
-                                  fontFamily: "Joan",
-                                  fontWeight: "600",
-                                }}
-                               
-                              >
-                               {dayNumber ? `Day ${dayNumber} Complete` : 'Mark Complete'}
-                              </Text>
-                            </TouchableOpacity>
+              onPress={completeCurrentWorkout}
+              disabled={isCompleting}
+              style={{
+                backgroundColor: "#E6B82C",
+                paddingVertical: 10,
+                paddingHorizontal: 22,
+                borderRadius: 20,
+                minWidth: 110,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: isCompleting ? 0.6 : 1,
+              }}
+            >
+              <Text
+                style={{
+                  color: "#000",
+                  fontSize: 24,
+                  fontFamily: "Joan",
+                  fontWeight: "600",
+                }}
+              >
+                {isCompleting
+                  ? "Saving..."
+                  : dayNumber
+                  ? `Day ${dayNumber} Complete`
+                  : "Mark Complete"}
+              </Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
