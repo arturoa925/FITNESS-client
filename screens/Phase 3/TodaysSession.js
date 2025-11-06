@@ -81,6 +81,7 @@ export default function TodaysSession({ navigation, route }) {
   const [dayNumber, setDayNumber] = useState(null);   // 1-based
   const [dayTitle, setDayTitle] = useState("");
   const [isCompleting, setIsCompleting] = useState(false);
+  const autoAdvanceRef = useRef(false);
 
   // --- Swipe right to go Home ---
   const swipeHandledRef = useRef(false);
@@ -131,6 +132,18 @@ export default function TodaysSession({ navigation, route }) {
     return parts.join(" — ");
   };
 
+  // A day is considered completed if it has an explicit flag OR all workouts are completed.
+  const isDayCompleted = (day) => {
+    if (!day) return false;
+    if (day.completed || day.done || day.status === "done") return true;
+    if (Array.isArray(day.workouts) && day.workouts.length > 0) {
+      return day.workouts.every(
+        (w) => w?.completed === true || w?.done === true || w?.status === "done"
+      );
+    }
+    return false;
+  };
+
   useEffect(() => {
     try {
       const p = route?.params || {};
@@ -162,6 +175,27 @@ export default function TodaysSession({ navigation, route }) {
           if (fullDay) {
             dayObj = { ...(dayObj || {}), ...fullDay };
             workouts = Array.isArray(fullDay.workouts) ? fullDay.workouts : [];
+          }
+        }
+      }
+
+      // If current day is already complete, auto-advance once to the next incomplete day
+      if (program && !autoAdvanceRef.current) {
+        const wkCheck = program.workouts?.[wi];
+        const dayCheck = wkCheck?.days?.[di];
+        if (isDayCompleted(dayCheck)) {
+          // start searching after the current day's last workout
+          const lastIdx = Array.isArray(dayCheck?.workouts) ? Math.max(0, dayCheck.workouts.length - 1) : 0;
+          const nextPtr = computeNextPointer(program, wi, di, lastIdx);
+          if (nextPtr && (nextPtr.weekIndex !== wi || nextPtr.dayIndex !== di)) {
+            autoAdvanceRef.current = true;
+            navigation.replace("TodaysSession", {
+              ...route.params,
+              weekIndex: nextPtr.weekIndex,
+              dayIndex: nextPtr.dayIndex,
+              program, // pass along full program for immediate render
+            });
+            return; // stop rendering stale day
           }
         }
       }

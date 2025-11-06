@@ -1,8 +1,22 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Animated, Easing, Platform } from "react-native";
+import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 
 import * as SecureStore from "expo-secure-store";
+
+// A day counts as completed if it is explicitly marked completed/done OR
+// if all of its workouts (when present) are completed.
+const isDayCompleted = (day) => {
+  if (!day) return false;
+  if (day.completed || day.done || day.status === "done") return true;
+  if (Array.isArray(day.workouts) && day.workouts.length > 0) {
+    return day.workouts.every(
+      (w) => w?.completed === true || w?.done === true || w?.status === "done"
+    );
+  }
+  return false;
+};
 
 // --- helpers: normalize a program into weeks with days and compute counts ---
 const deriveWeeksFromProgram = (programLike, fallbackDuration) => {
@@ -14,7 +28,7 @@ const deriveWeeksFromProgram = (programLike, fallbackDuration) => {
       totalDays: Number(w?.totalDays) || (Array.isArray(w?.days) ? w.days.length : 0),
       completedDays:
         Number(w?.completedDays) ||
-        (Array.isArray(w?.days) ? w.days.filter((d) => d?.completed || d?.done || d?.status === "done").length : 0),
+        (Array.isArray(w?.days) ? w.days.filter(isDayCompleted).length : 0),
     }));
   }
   // 2) workouts grouped by weekIndex → build weeks with days
@@ -32,7 +46,7 @@ const deriveWeeksFromProgram = (programLike, fallbackDuration) => {
       return {
         days,
         totalDays: days.length,
-        completedDays: days.filter((d) => d?.completed || d?.done || d?.status === "done").length,
+        completedDays: days.filter(isDayCompleted).length,
       };
     });
   }
@@ -52,6 +66,7 @@ const deriveWeeksFromProgram = (programLike, fallbackDuration) => {
 export default function ProgressBar({ width = 300 }) {
   const [progress, setProgress] = useState(0);
   const [noProgram, setNoProgram] = useState(false);
+  const isFocused = useIsFocused();
 
   // animated progress (animate on mount/change)
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -67,65 +82,74 @@ export default function ProgressBar({ width = 300 }) {
     outputRange: [-width, width],
   });
 
-  useEffect(() => {
-    const fetchProgress = async () => {
-      try {
-        const storedId = await SecureStore.getItemAsync("userId");
-        if (!storedId) {
-          setNoProgram(true);
-          setProgress(0);
-          return;
-        }
-        const token = await SecureStore.getItemAsync("authToken");
-        const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
-        const res = await fetch(`${baseURL}/users/${storedId}/training-programs`, {
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        });
-        if (!res.ok) {
-          setNoProgram(true);
-          setProgress(0);
-          return;
-        }
-        const data = await res.json();
-        // API may return a single program object OR an array
-        const program = Array.isArray(data) ? data[0] : data;
-        if (!program) {
-          setNoProgram(true);
-          setProgress(0);
-          return;
-        }
-        const weeks = deriveWeeksFromProgram(program, program?.duration);
-        if (!weeks.length) {
-          setNoProgram(true);
-          setProgress(0);
-          return;
-        }
-        // Find current week: first week that's not fully complete; otherwise last week
-        let currentIndex = 0;
-        for (let i = 0; i < weeks.length; i++) {
-          const w = weeks[i];
-          const td = Number(w.totalDays) || (Array.isArray(w.days) ? w.days.length : 0);
-          const cd = Number(w.completedDays) || 0;
-          if (td === 0) { currentIndex = i; break; }
-          if (cd < td) { currentIndex = i; break; }
-          if (i === weeks.length - 1) currentIndex = i;
-        }
-        const current = weeks[currentIndex];
-        const totalDays = Number(current.totalDays) || (Array.isArray(current.days) ? current.days.length : 0);
-        const completedDays = Number(current.completedDays) || 0;
-        const ratio = totalDays > 0 ? Math.max(0, Math.min(1, completedDays / totalDays)) : 0;
-        setNoProgram(false);
-        setProgress(ratio);
-      } catch (e) {
-        console.log("[ProgressBar] fetch error:", e);
+  const fetchProgress = async () => {
+    try {
+      const storedId = await SecureStore.getItemAsync("userId");
+      if (!storedId) {
         setNoProgram(true);
         setProgress(0);
+        return;
       }
-    };
+      const token = await SecureStore.getItemAsync("authToken");
+      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const res = await fetch(`${baseURL}/users/${storedId}/training-programs`, {
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
+          "Pragma": "no-cache",
+          "Expires": "0",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!res.ok) {
+        setNoProgram(true);
+        setProgress(0);
+        return;
+      }
+      const data = await res.json();
+      // API may return a single program object OR an array
+      const program = Array.isArray(data) ? data[0] : data;
+      if (!program) {
+        setNoProgram(true);
+        setProgress(0);
+        return;
+      }
+      const weeks = deriveWeeksFromProgram(program, program?.duration);
+      if (!weeks.length) {
+        setNoProgram(true);
+        setProgress(0);
+        return;
+      }
+      // Find current week: first week that's not fully complete; otherwise last week
+      let currentIndex = 0;
+      for (let i = 0; i < weeks.length; i++) {
+        const w = weeks[i];
+        const td = Number(w.totalDays) || (Array.isArray(w.days) ? w.days.length : 0);
+        const cd = Number(w.completedDays) || 0;
+        if (td === 0) { currentIndex = i; break; }
+        if (cd < td) { currentIndex = i; break; }
+        if (i === weeks.length - 1) currentIndex = i;
+      }
+      const current = weeks[currentIndex];
+      const totalDays = Number(current.totalDays) || (Array.isArray(current.days) ? current.days.length : 0);
+      const completedDays = Number(current.completedDays) || 0;
+      const ratio = totalDays > 0 ? Math.max(0, Math.min(1, completedDays / totalDays)) : 0;
+      setNoProgram(false);
+      setProgress(ratio);
+    } catch (e) {
+      console.log("[ProgressBar] fetch error:", e);
+      setNoProgram(true);
+      setProgress(0);
+    }
+  };
+
+  useEffect(() => {
+    if (isFocused) fetchProgress();
+  }, [isFocused]);
+
+  useEffect(() => {
     fetchProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
