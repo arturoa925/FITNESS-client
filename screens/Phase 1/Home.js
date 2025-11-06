@@ -28,6 +28,27 @@ import { TouchableWithoutFeedback } from "react-native";
 
 import { FlatList } from "react-native";
 
+// Resolve API base robustly for simulator/device (port 3004, no trailing slash)
+const resolveApiBase = () => {
+  const env = process.env.EXPO_PUBLIC_API_BASE?.trim();
+  if (env) return env.replace(/\/+$/, "");
+  const isAndroid = Platform.OS === "android";
+  // Try to derive host used by Expo dev session (optional)
+  let host = null;
+  try {
+    const Constants = require("expo-constants").default;
+    const hostUri =
+      Constants?.expoConfig?.hostUri ||
+      Constants?.manifest2?.extra?.expoGo?.debuggerHost ||
+      Constants?.manifest?.debuggerHost;
+    if (hostUri) host = String(hostUri).split(":")[0];
+  } catch {}
+  if (isAndroid) {
+    return host ? `http://${host}:3004` : `http://10.0.2.2:3004`;
+  }
+  return host ? `http://${host}:3004` : `http://127.0.0.1:3004`;
+};
+
 // Normalize weeks from different backend shapes
 const deriveWeeksFromProgram = (programLike, fallbackDuration) => {
   if (!programLike) return [];
@@ -59,24 +80,43 @@ const deriveWeeksFromProgram = (programLike, fallbackDuration) => {
 // Retrieve the user's current training program (requires auth token)
 const fetchCurrentProgram = async (userId, token, baseURL) => {
   if (!userId || !token) return null;
+  const url = `${baseURL}/users/${userId}/training-programs`;
   try {
-    const res = await fetch(`${baseURL}/users/${userId}/training-programs`, {
+    console.log("[Home] GET", url);
+    const res = await fetch(url, {
       headers: {
         "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Expires": "0",
         Authorization: `Bearer ${token}`,
       },
     });
-    if (!res.ok) {
-      console.warn("[fetchCurrentProgram] failed:", res.status);
-      return null;
-    }
-    const data = await res.json();
+    console.log("[Home] /training-programs status", res.status);
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    console.log(
+      "[Home] /training-programs payload",
+      Array.isArray(data) ? data.map((p) => ({ id: p?.id, name: p?.name })) : data?.id
+    );
     if (Array.isArray(data) && data.length) return data[0];
     return data;
   } catch (err) {
     console.error("[fetchCurrentProgram] error:", err);
     return null;
   }
+};
+
+// A day is completed if explicitly flagged OR if all workouts are completed.
+const isDayCompleted = (day) => {
+  if (!day) return false;
+  if (day.completed || day.done || day.status === "done") return true;
+  if (Array.isArray(day.workouts) && day.workouts.length > 0) {
+    return day.workouts.every(
+      (w) => w?.completed === true || w?.done === true || w?.status === "done"
+    );
+  }
+  return false;
 };
 
 // * user context
@@ -146,7 +186,8 @@ export default function Home({ navigation, route }) {
         Alert.alert("Sign in required", "Please log in to view your sessions.");
         return;
       }
-      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const baseURL = resolveApiBase();
+      console.log("[Home] handleOpenSessions baseURL", baseURL);
       const token = await SecureStore.getItemAsync("authToken");
       if (!token) {
         Alert.alert("Authentication required", "Your session expired. Please sign in again.");
@@ -156,6 +197,7 @@ export default function Home({ navigation, route }) {
 
       // Prefer the latest from the dedicated endpoint
       let program = await fetchCurrentProgram(storedId, token, baseURL);
+      console.log("[Home] handleOpenSessions program", program?.id, program?.name);
 
       // If we landed here right after subscribing, also consider a recent payload
       if (!program && route?.params?.subscription) {
@@ -214,9 +256,7 @@ export default function Home({ navigation, route }) {
                 const td = Number(w.totalDays) || daysArr.length;
                 const cd =
                   Number(w.completedDays) ||
-                  daysArr.filter(
-                    (d) => d?.completed || d?.done || d?.status === "done"
-                  ).length;
+                  daysArr.filter(isDayCompleted).length;
                 return acc + (td > 0 && cd >= td ? 1 : 0);
               }, 0);
               const currentWeekSub = Math.min(
@@ -239,14 +279,15 @@ export default function Home({ navigation, route }) {
               setWeekInfo({ current: null, total: null, noProgram: true });
             return;
           }
-          const baseURL =
-            Platform.OS === "android"
-              ? "http://10.0.2.2:3004"
-              : "http://localhost:3004";
+          const baseURL = resolveApiBase();
+          console.log("[Home] focus baseURL", baseURL);
           const token = await SecureStore.getItemAsync("authToken");
           const res = await fetch(`${baseURL}/users/${storedId}`, {
             headers: {
               "Content-Type": "application/json",
+              "Cache-Control": "no-cache",
+              "Pragma": "no-cache",
+              "Expires": "0",
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
           });
@@ -256,6 +297,12 @@ export default function Home({ navigation, route }) {
             return;
           }
           const data = await res.json();
+          console.log(
+            "[Home] /users me payload keys",
+            Object.keys(data || {}),
+            "has trainingPrograms",
+            Array.isArray(data?.trainingPrograms)
+          );
           // Resolve program and weeks from common shapes
           let program =
             (Array.isArray(data?.trainingPrograms) &&
@@ -289,9 +336,7 @@ export default function Home({ navigation, route }) {
             const td = Number(w.totalDays) || daysArr.length;
             const cd =
               Number(w.completedDays) ||
-              daysArr.filter(
-                (d) => d?.completed || d?.done || d?.status === "done"
-              ).length;
+              daysArr.filter(isDayCompleted).length;
             return acc + (td > 0 && cd >= td ? 1 : 0);
           }, 0);
           // Current week is the next one in progress
@@ -555,7 +600,7 @@ export default function Home({ navigation, route }) {
 
                 {/* see sweat button on the right */}
               <TouchableOpacity
-                onPress={handleOpenSessions}
+                onPress={() => { console.log("[Home] See Sweat tapped"); handleOpenSessions(); }}
                 disabled={sessionsLoading}
                 style={{
                   backgroundColor: "#E6B82C",

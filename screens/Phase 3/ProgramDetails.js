@@ -22,6 +22,25 @@ import * as SecureStore from "expo-secure-store";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import Constants from "expo-constants";
+
+// Helper to resolve the API base URL (no trailing slash, no `/api`)
+const resolveApiBase = () => {
+  const env = process.env.EXPO_PUBLIC_API_BASE?.trim();
+  if (env) return env.replace(/\/+$/, "");
+  let host = null;
+  try {
+    const hostUri =
+      Constants?.expoConfig?.hostUri ||
+      Constants?.manifest2?.extra?.expoGo?.debuggerHost ||
+      Constants?.manifest?.debuggerHost;
+    if (hostUri) host = String(hostUri).split(":")[0];
+  } catch {}
+  if (Platform.OS === "android") {
+    return host ? `http://${host}:3004` : `http://10.0.2.2:3004`;
+  }
+  return host ? `http://${host}:3004` : `http://127.0.0.1:3004`;
+};
 
 export default function ProgramDetails({ navigation, route }) {
   const { width, height, fontScale } = useWindowDimensions();
@@ -42,6 +61,8 @@ export default function ProgramDetails({ navigation, route }) {
   const [weeks, setWeeks] = useState([]);
 
   const [submitting, setSubmitting] = useState(false);
+  const [activeProgram, setActiveProgram] = useState(null);
+  const [loadingActive, setLoadingActive] = useState(false);
 
   const formatWorkoutLabel = (w) => {
     // Build a concise label from known fields; fall back to name
@@ -157,85 +178,216 @@ export default function ProgramDetails({ navigation, route }) {
     })
   ).current;
 
+  // Helper to fetch the user's current/active program (first program returned)
+  const fetchActiveProgram = useCallback(async (uid, token) => {
+    const base = resolveApiBase();
+    const res = await fetch(`${base}/users/${uid}/training-programs`, {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (!data) return null;
+    return Array.isArray(data) ? (data[0] || null) : data;
+  }, []);
+
+  // Helper: persist active program id to SecureStore
+  // Refetch active program on focus
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      (async () => {
+        try {
+          setLoadingActive(true);
+          const storedUserId = await SecureStore.getItemAsync("userId");
+          const token =
+            (await SecureStore.getItemAsync("authToken")) ||
+            (await SecureStore.getItemAsync("token")) ||
+            (await SecureStore.getItemAsync("accessToken")) || null;
+          if (!storedUserId || !token) {
+            if (isMounted) setActiveProgram(null);
+            return;
+          }
+          const ap = await fetchActiveProgram(storedUserId, token);
+          if (isMounted) setActiveProgram(ap);
+        } catch (e) {
+          console.log("[ProgramDetails] fetch active error", e?.message || e);
+          if (isMounted) setActiveProgram(null);
+        } finally {
+          if (isMounted) setLoadingActive(false);
+        }
+      })();
+      return () => {
+        isMounted = false;
+      };
+    }, [fetchActiveProgram])
+  );
+
+  const persistActiveProgramId = useCallback(async (p) => {
+    try {
+      const pid = p?.id || p?.programId;
+      if (pid) {
+        await SecureStore.setItemAsync("programId", String(pid));
+      }
+    } catch {}
+  }, []);
+
   const handleBeginPrep = useCallback(async () => {
     try {
       setSubmitting(true);
+      console.log("[ProgramDetails] BeginPrep tapped", {
+        viewingProgramId: program?.id || program?.programId,
+        activeProgramId: activeProgram?.id || activeProgram?.programId,
+      });
 
-      // Try to resolve the user id from a few places
+      // Resolve user id
       const storedUserId = await SecureStore.getItemAsync("userId");
       const uid =
         storedUserId ||
         program?.userId ||
         (route && route.params && route.params.userId);
-
       if (!uid) {
         Alert.alert("Missing user ID", "Could not determine your user ID.");
         return;
       }
 
-      const url = `http://localhost:3004/users/${uid}/program/choose`;
-
-      // Retrieve an auth token (try common keys; adjust if your app uses a different key)
+      // Resolve token
       const tokenKeys = ["accessToken", "token", "idToken", "jwt", "authToken"];
       let authToken = null;
       for (const k of tokenKeys) {
         const v = await SecureStore.getItemAsync(k);
-        if (v) {
-          authToken = v;
-          break;
-        }
+        if (v) { authToken = v; break; }
       }
       if (!authToken) {
-        Alert.alert(
-          "Not signed in",
-          "Your session token is missing. Please log in again."
-        );
-        try {
-          navigation.navigate("Login");
-        } catch {}
+        Alert.alert("Not signed in", "Your session token is missing. Please log in again.");
+        try { navigation.navigate("Login"); } catch {}
         return;
       }
 
-      // Include a program identifier if available; backend can ignore null
-      const payload = {
-        programId: program?.id || program?.programId || null,
-      };
+      const base = resolveApiBase();
+      const chooseUrl = `${base}/users/${uid}/program/choose`;
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      // Determine active program (if any)
+      const active = await fetchActiveProgram(uid, authToken);
+      const activeId = active?.id || active?.programId || null;
+      const activeName = active?.name || "Current Program";
+      const targetId = program?.id || program?.programId || null;
+      const targetName = program?.name || programName || "Selected Program";
 
-      if (!res.ok) {
-        const text = await res.text();
-        if (res.status === 401 || res.status === 403) {
-          // Token rejected or missing permissions
-          Alert.alert(
-            "Authentication required",
-            "Your session may have expired. Please sign in again."
-          );
-          try {
-            navigation.navigate("Login");
-          } catch {}
+      // If no active program, enroll directly
+      if (!activeId) {
+        const res = await fetch(chooseUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ programId: targetId }),
+        });
+        if (!res.ok) throw new Error(`Enroll failed (${res.status})`);
+        const data = await res.json().catch(() => null);
+        // Verify server state by refetching the active program
+        const verified = await fetchActiveProgram(uid, authToken);
+        if (verified) {
+          await persistActiveProgramId(verified);
         }
-        throw new Error(`Request failed (${res.status}): ${text}`);
+        Alert.alert("Subscribed", "Your training program has been selected.");
+        console.log("[ProgramDetails] verified active program", verified || data);
+        navigation.replace("Home", { refreshed: true, subscription: verified || data });
+        return;
       }
 
-      // Try to parse JSON, but tolerate empty body
-      const data = await res.json().catch(() => null);
+      // Already enrolled in this same program
+      if (activeId && targetId && String(activeId) === String(targetId)) {
+        Alert.alert(
+          "Already Enrolled",
+          `You're already enrolled in "${targetName}".`,
+          [
+            { text: "Keep Current", style: "cancel" },
+            {
+              text: "Re-enroll",
+              onPress: async () => {
+                const res = await fetch(chooseUrl, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${authToken}`,
+                  },
+                  body: JSON.stringify({ programId: targetId }),
+                });
+                if (!res.ok) throw new Error(`Enroll failed (${res.status})`);
+                const data = await res.json().catch(() => null);
+                const verified = await fetchActiveProgram(uid, authToken);
+                if (verified) {
+                  await persistActiveProgramId(verified);
+                }
+                Alert.alert("Re-subscribed", "Your program has been refreshed.");
+                console.log("[ProgramDetails] verified active program", verified || data);
+                navigation.replace("Home", { refreshed: true, subscription: verified || data });
+              },
+            },
+          ]
+        );
+        return;
+      }
 
-      Alert.alert("Subscribed", "Your training program has been selected.");
-      navigation.replace("Home", { refreshed: true, subscription: data });
+      // Enrolled in a different program — offer to switch
+      Alert.alert(
+        "Switch Program?",
+        `You're currently enrolled in "${activeName}".\nSwitch to "${targetName}"?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Switch",
+            style: "destructive",
+            onPress: async () => {
+              // Optional: mark the current program as complete via the user's route hint
+              // Note: if your backend expects a different payload for completion, adjust here.
+              try {
+                const completeUrl = `${base}/users/${uid}/program/complete`;
+                await fetch(completeUrl, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${authToken}`,
+                  },
+                  body: JSON.stringify({ programId: activeId }),
+                }).catch(() => {});
+              } catch {}
+
+              // Choose the new program
+              const res = await fetch(chooseUrl, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${authToken}`,
+                },
+                body: JSON.stringify({ programId: targetId }),
+              });
+              if (!res.ok) throw new Error(`Switch failed (${res.status})`);
+              const data = await res.json().catch(() => null);
+              const verified = await fetchActiveProgram(uid, authToken);
+              if (verified) {
+                await persistActiveProgramId(verified);
+              }
+              Alert.alert("Switched", `You are now enrolled in "${targetName}".`);
+              console.log("[ProgramDetails] verified active program", verified || data);
+              navigation.replace("Home", { refreshed: true, subscription: verified || data });
+            },
+          },
+        ]
+      );
     } catch (err) {
-      Alert.alert("Subscription failed", String(err?.message || err));
+      Alert.alert("Action failed", String(err?.message || err));
     } finally {
       setSubmitting(false);
     }
-  }, [navigation, program, route]);
+  }, [navigation, program, programName, route, fetchActiveProgram, persistActiveProgramId]);
 
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
@@ -269,6 +421,7 @@ export default function ProgramDetails({ navigation, route }) {
                 {title}
               </Text>
             </View>
+
 
             {/* Not enrolled / error message */}
             {noProgram ? (
