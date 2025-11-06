@@ -27,6 +27,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useUser } from "../../components/UserContext";
 
+// A day is completed if it has an explicit completed flag OR if all of its workouts are completed.
+const isDayCompleted = (day) => {
+  if (!day) return false;
+  if (day.completed || day.done || day.status === "done") return true;
+  if (Array.isArray(day.workouts) && day.workouts.length > 0) {
+    return day.workouts.every(
+      (w) => w?.completed === true || w?.done === true || w?.status === "done"
+    );
+  }
+  return false;
+};
+
 // Normalize a program into week rows: [{ week, completedDays, totalDays, days: [{title,completed}] }]
 const deriveWeekRows = (programLike, fallbackDuration) => {
   if (!programLike) return [];
@@ -44,7 +56,7 @@ const deriveWeekRows = (programLike, fallbackDuration) => {
       days: Array.isArray(r.days)
         ? r.days.map((d, di) => ({
             title: d?.title || `Day ${di + 1}`,
-            completed: Boolean(d?.completed || d?.done || d?.status === "done"),
+            completed: isDayCompleted(d),
           }))
         : Array.from({ length: Number(r.totalDays) || 0 }, (_, di) => ({
             title: `Day ${di + 1}`,
@@ -58,12 +70,11 @@ const deriveWeekRows = (programLike, fallbackDuration) => {
       const days = Array.isArray(w?.days) ? w.days : [];
       const cd =
         Number(w?.completedDays) ||
-        days.filter((d) => d?.completed || d?.done || d?.status === "done")
-          .length;
+        days.filter(isDayCompleted).length;
       const td = Number(w?.totalDays) || days.length || Number(w?.total) || 0;
       const dayRows = days.map((d, di) => ({
         title: d?.title || `Day ${di + 1}`,
-        completed: Boolean(d?.completed || d?.done || d?.status === "done"),
+        completed: isDayCompleted(d),
       }));
       return {
         week: w.week || w.number || w.index || idx + 1,
@@ -87,13 +98,11 @@ const deriveWeekRows = (programLike, fallbackDuration) => {
       .sort((a, b) => a - b);
     return indices.map((i, idx) => {
       const days = grouped[i] || [];
-      const cd = days.filter(
-        (d) => d?.completed || d?.done || d?.status === "done"
-      ).length;
+      const cd = days.filter(isDayCompleted).length;
       const td = days.length || 5;
       const dayRows = days.map((d, di) => ({
         title: d?.title || `Day ${di + 1}`,
-        completed: Boolean(d?.completed || d?.done || d?.status === "done"),
+        completed: isDayCompleted(d),
       }));
       return {
         week: i + 1 || idx + 1,
@@ -198,6 +207,9 @@ export default function Sessions({ navigation, route }) {
       const res = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
+          "Pragma": "no-cache",
+          "Expires": "0",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
@@ -559,7 +571,13 @@ export default function Sessions({ navigation, route }) {
                   <Text
                     style={[
                       tw`text-base`,
-                      { color: "#0E0E0E", fontFamily: "Joan", fontSize: 18 },
+                      {
+                        color: isDone ? "#333" : "#0E0E0E",
+                        fontFamily: "Joan",
+                        fontSize: 18,
+                        textDecorationLine: isDone ? "line-through" : "none",
+                        textDecorationStyle: "solid",
+                      },
                     ]}
                   >
                     {d?.title || `Day ${i + 1}`}
