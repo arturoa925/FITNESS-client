@@ -22,6 +22,26 @@ import * as SecureStore from "expo-secure-store";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import Constants from "expo-constants";
+import * as Network from "expo-network";
+
+// Resolve API base for simulator/device (no trailing slash)
+const resolveApiBase = () => {
+  const env = process.env.EXPO_PUBLIC_API_BASE?.trim();
+  if (env) return env.replace(/\/+$/, "");
+  let host = null;
+  try {
+    const hostUri =
+      Constants?.expoConfig?.hostUri ||
+      Constants?.manifest2?.extra?.expoGo?.debuggerHost ||
+      Constants?.manifest?.debuggerHost;
+    if (hostUri) host = String(hostUri).split(":")[0];
+  } catch {}
+  if (Platform.OS === "android") {
+    return host ? `http://${host}:3004` : `http://10.0.2.2:3004`;
+  }
+  return host ? `http://${host}:3004` : `http://127.0.0.1:3004`;
+};
 
 // Reusable exercise card
 function ExerciseCard({ exercise, maxWidth }) {
@@ -139,37 +159,11 @@ export default function DailyGrind({ navigation }) {
   const bodySize = isNarrow || isShort ? 15 / fontScale : 16 / fontScale;
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
 
-  // Placeholder array until backend fetch
-  const [exercises, setExercises] = useState([
-    {
-      id: "ex-1",
-      name: "Kettlebell Swings",
-      imageUri: "",
-      description: "Target and Description",
-      reps: ["Easy - 3 sets by 10 reps", "Med - 4 sets by 10 reps", "Hard - 4 sets by 6 - 8 reps"],
-    },
-    {
-      id: "ex-2",
-      name: "Goblet Squats",
-      imageUri: "",
-      description: "Target and Description",
-      reps: ["Easy - 3 x 8", "Med - 4 x 10", "Hard - 5 x 5"],
-    },
-    {
-      id: "ex-3",
-      name: "Push-Ups",
-      imageUri: "",
-      description: "Target and Description",
-      reps: ["Easy - 3 x 10", "Med - 4 x 12", "Hard - 5 x 15"],
-    },
-    {
-      id: "ex-4",
-      name: "Plank",
-      imageUri: "",
-      description: "Target and Description",
-      reps: ["Easy - 3 x :20s", "Med - 4 x :30s", "Hard - 4 x :45s"],
-    },
-  ]);
+  // Online-only AI plan state
+  const [planId, setPlanId] = useState(null);
+  const [exercises, setExercises] = useState([]); // start empty; requires internet/AI
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   // --- Swipe right to go Home ---
   const swipeHandledRef = useRef(false);
@@ -208,6 +202,70 @@ export default function DailyGrind({ navigation }) {
     })
   ).current;
 
+  // Generate immediately when the screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      // fire-and-forget; generateDailyWorkout handles connectivity + errors
+      generateDailyWorkout();
+      return () => {};
+    }, [generateDailyWorkout])
+  );
+
+  const generateDailyWorkout = useCallback(async () => {
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+      // Require internet connectivity
+      const net = await Network.getNetworkStateAsync();
+      if (!net?.isConnected || !net?.isInternetReachable) {
+        setPlanId(null);
+        setExercises([]);
+        setErrorMsg("No internet connection. Connect to the internet to generate today's workout.");
+        return;
+      }
+      // Server AI only
+      const base = resolveApiBase();
+      const token =
+        (await SecureStore.getItemAsync("authToken")) ||
+        (await SecureStore.getItemAsync("token")) ||
+        (await SecureStore.getItemAsync("accessToken"));
+      const userId = (await SecureStore.getItemAsync("userId")) || "anonymous";
+      const res = await fetch(`${base}/ai/daily-workout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          userId,
+          // Optional: pass lightweight context, no program linkage
+          preferences: { equipment: "any", timeMin: 30, focus: "balanced" },
+        }),
+      });
+      if (!res.ok) {
+        setPlanId(null);
+        setExercises([]);
+        setErrorMsg(`Server error (${res.status}). Unable to generate workout right now.`);
+        return;
+      }
+      const payload = await res.json().catch(() => null);
+      if (!payload || !payload.exercises || !Array.isArray(payload.exercises) || payload.exercises.length === 0) {
+        setPlanId(null);
+        setExercises([]);
+        setErrorMsg("No workout returned. Please try again in a moment.");
+        return;
+      }
+      setPlanId(payload.id || Date.now().toString());
+      setExercises(payload.exercises);
+    } catch (e) {
+      setPlanId(null);
+      setExercises([]);
+      setErrorMsg(String(e?.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return (
     <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
       <KeyboardAvoidingView
@@ -240,6 +298,29 @@ export default function DailyGrind({ navigation }) {
                 Daily Grind
               </Text>
             </View>
+
+            {errorMsg ? (
+              <Text style={{ color: "#B00020", fontFamily: "Joan", fontSize: 14, textAlign: "center", marginBottom: 8 }}>
+                {errorMsg}
+              </Text>
+            ) : null}
+
+            <TouchableOpacity
+              onPress={generateDailyWorkout}
+              disabled={loading}
+              style={{
+                backgroundColor: "#4DA3FF",
+                paddingVertical: 8,
+                paddingHorizontal: 16,
+                borderRadius: 16,
+                opacity: loading ? 0.7 : 1,
+                marginBottom: 6,
+              }}
+            >
+              <Text style={{ color: "#fff", fontFamily: "Joan", fontSize: 16 }}>
+                {loading ? "Generating…" : (exercises.length ? "Regenerate" : "Generate Workout")}
+              </Text>
+            </TouchableOpacity>
 
             {/* Exercises list */}
             {exercises.map((ex) => (
