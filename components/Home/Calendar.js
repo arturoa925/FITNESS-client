@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,15 @@ import {
 import { Calendar } from "react-native-calendars";
 import { Picker } from "@react-native-picker/picker";
 
-export default function CalendarFoodLog({ maxWidth, completedWorkouts = {} }) {
+
+const API_BASE_URL = "http://localhost:3004";
+
+export default function CalendarFoodLog({
+  maxWidth,
+  userId,
+  authToken,
+  completedWorkouts: completedWorkoutsProp = {},
+}) {
   // ----- Calendar & Food Log state -----
   const [selectedDate, setSelectedDate] = useState(null);
   const [foodModalOpen, setFoodModalOpen] = useState(false);
@@ -23,9 +31,117 @@ export default function CalendarFoodLog({ maxWidth, completedWorkouts = {} }) {
   const [foodUnit, setFoodUnit] = useState("g");
 
   // Foods keyed by date
-  const [foodsByDate, setFoodsByDate] = useState({
-    "2025-10-02": [{ name: "Greek Yogurt", amount: "170", unit: "g" }],
-  });
+  const [foodsByDate, setFoodsByDate] = useState({});
+
+  // Completed workouts keyed by date fetched from the backend calendar route
+  const [serverCompletedWorkouts, setServerCompletedWorkouts] = useState({});
+  const [loadingCalendar, setLoadingCalendar] = useState(false);
+  const [calendarError, setCalendarError] = useState(null);
+
+  // Prefer server-fetched completed workouts when available, otherwise fall back to prop
+  const completedWorkouts =
+    Object.keys(serverCompletedWorkouts || {}).length > 0
+      ? serverCompletedWorkouts
+      : completedWorkoutsProp;
+
+  // Fetch completed workouts (and any foods) for the current month from the backend calendar route
+  useEffect(() => {
+    console.log("CalendarFoodLog useEffect fired:", {
+      userId,
+      hasAuthToken: !!authToken,
+    });
+    if (!userId || !authToken) {
+      console.log("CalendarFoodLog: missing userId or authToken, skipping fetch");
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const fetchCalendar = async () => {
+      try {
+        setLoadingCalendar(true);
+        setCalendarError(null);
+
+        const now = new Date();
+        const month = String(now.getMonth() + 1);
+        const year = String(now.getFullYear());
+
+        const params = new URLSearchParams({
+          month,
+          year,
+          onlyCompleted: "true",
+          // include flags if you want them on the server side, but this component
+          // currently only uses workouts + foods
+          // include: "flags",
+        });
+
+        console.log(
+          "CalendarFoodLog: fetching calendar from",
+          `${API_BASE_URL}/users/${userId}/calendar?${params.toString()}`
+        );
+        const res = await fetch(
+          `${API_BASE_URL}/users/${userId}/calendar?${params.toString()}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+              "Content-Type": "application/json",
+            },
+            signal: controller.signal,
+          }
+        );
+
+        if (!res.ok) {
+          throw new Error(`Calendar fetch failed with status ${res.status}`);
+        }
+
+        const data = await res.json();
+        
+
+        const workoutMap = {};
+        const foodsMap = {};
+
+        (data || []).forEach((entry) => {
+          const dateKey = entry.date;
+          if (!dateKey) return;
+
+          if (Array.isArray(entry.workouts) && entry.workouts.length > 0) {
+            // Route already supports onlyCompleted=true, but we defensively filter anyway
+            const completedForDay = entry.workouts.filter(
+              (w) => w && w.completed === true
+            );
+            if (completedForDay.length > 0) {
+              workoutMap[dateKey] = completedForDay;
+            }
+          }
+
+          if (Array.isArray(entry.foods) && entry.foods.length > 0) {
+            foodsMap[dateKey] = entry.foods;
+          }
+        });
+
+        setServerCompletedWorkouts(workoutMap);
+        // Merge server foods into local foods; local additions will still work
+        setFoodsByDate((prev) => ({
+          ...prev,
+          ...foodsMap,
+        }));
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        console.error("Error fetching calendar data:", err);
+        console.log("CalendarFoodLog error details:", err?.message);
+        setCalendarError("Unable to load your calendar right now.");
+      } finally {
+        setLoadingCalendar(false);
+      }
+    };
+
+    fetchCalendar();
+
+    return () => {
+      controller.abort();
+    };
+  }, [userId, authToken]);
 
   const openFoodModal = (dateStr) => {
     setSelectedDate(dateStr);
@@ -152,6 +268,18 @@ export default function CalendarFoodLog({ maxWidth, completedWorkouts = {} }) {
         {/* Day details */}
         <View style={{ marginTop: 16 }}>
           <Text style={{ fontFamily: "Joan", fontSize: 22, color: "#060000", marginBottom: 8 }}>Day Summary</Text>
+
+          {loadingCalendar && (
+            <Text style={{ fontFamily: "Joan", fontSize: 14, color: "#777", marginBottom: 4 }}>
+              Loading calendar...
+            </Text>
+          )}
+          {calendarError && (
+            <Text style={{ fontFamily: "Joan", fontSize: 14, color: "#B00020", marginBottom: 4 }}>
+              {calendarError}
+            </Text>
+          )}
+
           {/* Workouts */}
           <Text style={{ fontFamily: "Joan", fontSize: 18, color: "#355D73" }}>Workouts</Text>
           {selectedDate && completedWorkouts[selectedDate]?.length > 0 ? (

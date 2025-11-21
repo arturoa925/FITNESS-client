@@ -1,4 +1,4 @@
-// ! begin at phase 2 : strength (title) -> weeks
+
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { PanResponder, ActivityIndicator } from "react-native";
@@ -134,7 +134,7 @@ export default function Sessions({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [noProgram, setNoProgram] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  // TEMP: mock training data — this will later be driven by the selected plan
+  
   const [weeksData, setWeeksData] = useState([]);
   const [program, setProgram] = useState(null);
 

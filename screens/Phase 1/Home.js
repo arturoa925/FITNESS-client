@@ -178,6 +178,8 @@ export default function Home({ navigation, route }) {
     noProgram: false,
   });
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [calendarUserId, setCalendarUserId] = useState(null);
+  const [calendarAuthToken, setCalendarAuthToken] = useState(null);
   const handleOpenSessions = useCallback(async () => {
     try {
       setSessionsLoading(true);
@@ -223,6 +225,31 @@ export default function Home({ navigation, route }) {
       setSessionsLoading(false);
     }
   }, [navigation, route]);
+
+  useEffect(() => {
+    let isActive = true;
+    (async () => {
+      try {
+        const storedId = await SecureStore.getItemAsync("userId");
+        const token = await SecureStore.getItemAsync("authToken");
+        const resolvedUserId = storedId || user?.id || null;
+
+        if (isActive) {
+          setCalendarUserId(resolvedUserId);
+          setCalendarAuthToken(token || null);
+          console.log("[Home] calendar creds", {
+            userId: resolvedUserId,
+            hasToken: !!token,
+          });
+        }
+      } catch (e) {
+        console.log("[Home] calendar creds error:", e);
+      }
+    })();
+    return () => {
+      isActive = false;
+    };
+  }, [user]);
 
   useFocusEffect(
     useCallback(() => {
@@ -812,6 +839,8 @@ export default function Home({ navigation, route }) {
 
               <CalendarFoodLog
                 maxWidth={maxWidth}
+                userId={calendarUserId}
+                authToken={calendarAuthToken}
                 completedWorkouts={completedWorkouts}
               />
             </View>
