@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ export default function CalendarFoodLog({
   authToken,
   completedWorkouts: completedWorkoutsProp = {},
 }) {
-  // ----- Calendar & Food Log state -----
+  // Calendar & Food Log state
   const [selectedDate, setSelectedDate] = useState(null);
   const [foodModalOpen, setFoodModalOpen] = useState(false);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
@@ -45,16 +45,7 @@ export default function CalendarFoodLog({
 
   // Fetch completed workouts (and any foods) for the current month from the backend calendar route
   useEffect(() => {
-    console.log("CalendarFoodLog useEffect fired:", {
-      userId,
-      hasAuthToken: !!authToken,
-    });
-    if (!userId || !authToken) {
-      console.log(
-        "CalendarFoodLog: missing userId or authToken, skipping fetch"
-      );
-      return;
-    }
+    if (!userId || !authToken) return;
 
     const controller = new AbortController();
 
@@ -71,15 +62,8 @@ export default function CalendarFoodLog({
           month,
           year,
           onlyCompleted: "true",
-          // include flags if you want them on the server side, but this component
-          // currently only uses workouts + foods
-          // include: "flags",
         });
 
-        console.log(
-          "CalendarFoodLog: fetching calendar from",
-          `${API_BASE_URL}/users/${userId}/calendar?${params.toString()}`
-        );
         const res = await fetch(
           `${API_BASE_URL}/users/${userId}/calendar?${params.toString()}`,
           {
@@ -129,7 +113,6 @@ export default function CalendarFoodLog({
       } catch (err) {
         if (err.name === "AbortError") return;
         console.error("Error fetching calendar data:", err);
-        console.log("CalendarFoodLog error details:", err?.message);
         setCalendarError("Unable to load your calendar right now.");
       } finally {
         setLoadingCalendar(false);
@@ -143,47 +126,49 @@ export default function CalendarFoodLog({
     };
   }, [userId, authToken]);
 
-  const fetchFoodsForDate = async (dateStr) => {
-    if (!userId || !authToken) {
-      console.log("fetchFoodsForDate: missing credentials");
-      return;
-    }
-    try {
-      const url = `${API_BASE_URL}/users/${userId}/calendar/foods?date=${encodeURIComponent(
-        dateStr
-      )}`;
-      console.log("CalendarFoodLog: fetching foods for date:", url);
+  const fetchFoodsForDate = useCallback(
+    async (dateStr) => {
+      if (!userId || !authToken) return;
+      try {
+        const url = `${API_BASE_URL}/users/${userId}/calendar/foods?date=${encodeURIComponent(
+          dateStr
+        )}`;
 
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          "Content-Type": "application/json",
-        },
-      });
+        const res = await fetch(url, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+            "Content-Type": "application/json",
+          },
+        });
 
-      if (res.status === 404) {
-        setFoodsByDate((prev) => ({
-          ...prev,
-          [dateStr]: [],
-        }));
-        return;
+        // If no calendar entry exists for this date yet, treat as "no foods"
+        if (res.status === 200) {
+          const foods = await res.json();
+          setFoodsByDate((prev) => ({
+            ...prev,
+            [dateStr]: foods || [],
+          }));
+          return;
+        }
+
+        if (res.status === 404) {
+          setFoodsByDate((prev) => ({
+            ...prev,
+            [dateStr]: [],
+          }));
+          return;
+        }
+
+        if (!res.ok) {
+          console.error("fetchFoodsForDate failed, status:", res.status);
+        }
+      } catch (err) {
+        console.error("Error fetching foods for date:", dateStr, err);
       }
-
-      if (!res.ok) {
-        console.error("fetchFoodsForDate failed, status:", res.status);
-        return;
-      }
-
-      const foods = await res.json();
-      setFoodsByDate((prev) => ({
-        ...prev,
-        [dateStr]: foods || [],
-      }));
-    } catch (err) {
-      console.error("Error fetching foods for date:", dateStr, err);
-    }
-  };
+    },
+    [userId, authToken]
+  );
 
   const openFoodModal = (dateStr) => {
     setSelectedDate(dateStr);
@@ -256,6 +241,7 @@ export default function CalendarFoodLog({
     setFoodModalOpen(false);
     requestAnimationFrame(() => setUnitModalOpen(true));
   };
+
   const finishUnitPick = (val) => {
     setFoodUnit(val);
     setUnitModalOpen(false);
@@ -263,8 +249,9 @@ export default function CalendarFoodLog({
   };
 
   // Build markedDates for multi-dot calendar (workouts + foods + selected)
-  const markedDates = (() => {
+  const markedDates = useMemo(() => {
     const marks = {};
+
     Object.keys(completedWorkouts || {}).forEach((d) => {
       marks[d] = {
         ...(marks[d] || {}),
@@ -272,6 +259,7 @@ export default function CalendarFoodLog({
         dots: [{ color: "#355D73" }],
       };
     });
+
     Object.keys(foodsByDate || {}).forEach((d) => {
       const foods = foodsByDate[d];
       const hasFoods = Array.isArray(foods) && foods.length > 0;
@@ -283,6 +271,7 @@ export default function CalendarFoodLog({
         dots: [...(marks[d]?.dots || []), { color: "#E6B82C" }],
       };
     });
+
     if (selectedDate) {
       marks[selectedDate] = {
         ...marks[selectedDate],
@@ -290,8 +279,13 @@ export default function CalendarFoodLog({
         selectedColor: "#87DAF0",
       };
     }
+
     return marks;
-  })();
+  }, [completedWorkouts, foodsByDate, selectedDate]);
+
+  const formattedSelectedLabel = selectedDate
+    ? `Selected: ${selectedDate}`
+    : "Select a day";
 
   return (
     <>
@@ -301,15 +295,15 @@ export default function CalendarFoodLog({
           width: maxWidth * 0.95,
           alignSelf: "center",
           backgroundColor: "#FFFFFF",
-          borderRadius: 12,
+          borderRadius: 16,
           overflow: "hidden",
           marginTop: 16,
-          padding: 12,
+          padding: 14,
           shadowColor: "#000",
-          shadowOpacity: 0.1,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 2 },
-          elevation: 2,
+          shadowOpacity: 0.08,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 3,
         }}
       >
         <Calendar
@@ -322,9 +316,9 @@ export default function CalendarFoodLog({
             textDayHeaderFontFamily: "Joan",
             monthTextColor: "#060000",
             calendarBackground: "#FFFFFF",
-            textDayFontSize: 22,
+            textDayFontSize: 20,
             textMonthFontSize: 24,
-            textDayHeaderFontSize: 16,
+            textDayHeaderFontSize: 14,
           }}
           markingType="multi-dot"
           markedDates={markedDates}
@@ -339,9 +333,11 @@ export default function CalendarFoodLog({
         <View
           style={{
             flexDirection: "row",
+            justifyContent: "flex-start",
             gap: 16,
-            marginTop: 8,
+            marginTop: 10,
             alignItems: "center",
+            flexWrap: "wrap",
           }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -354,9 +350,9 @@ export default function CalendarFoodLog({
               }}
             />
             <Text
-              style={{ fontFamily: "Joan", color: "#060000", fontSize: 16 }}
+              style={{ fontFamily: "Joan", color: "#060000", fontSize: 14 }}
             >
-              Workout (blue-gray)
+              Workout
             </Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -369,9 +365,9 @@ export default function CalendarFoodLog({
               }}
             />
             <Text
-              style={{ fontFamily: "Joan", color: "#060000", fontSize: 16 }}
+              style={{ fontFamily: "Joan", color: "#060000", fontSize: 14 }}
             >
-              Food (yellow)
+              Food
             </Text>
           </View>
         </View>
@@ -379,14 +375,14 @@ export default function CalendarFoodLog({
         {/* Day actions */}
         <View
           style={{
-            marginTop: 12,
+            marginTop: 14,
             flexDirection: "row",
             justifyContent: "space-between",
             alignItems: "center",
           }}
         >
-          <Text style={{ fontFamily: "Joan", fontSize: 20, color: "#060000" }}>
-            {selectedDate ? `Selected: ${selectedDate}` : "Select a day"}
+          <Text style={{ fontFamily: "Joan", fontSize: 18, color: "#060000" }}>
+            {formattedSelectedLabel}
           </Text>
           <TouchableOpacity
             onPress={() => {
@@ -398,15 +394,15 @@ export default function CalendarFoodLog({
             }}
             style={{
               backgroundColor: "#E6B82C",
-              paddingVertical: 10,
-              paddingHorizontal: 16,
-              borderRadius: 12,
+              paddingVertical: 8,
+              paddingHorizontal: 14,
+              borderRadius: 999,
             }}
           >
             <Text
               style={{
                 color: "#000",
-                fontSize: 16,
+                fontSize: 15,
                 fontFamily: "Joan",
                 fontWeight: "600",
               }}
@@ -417,13 +413,13 @@ export default function CalendarFoodLog({
         </View>
 
         {/* Day details */}
-        <View style={{ marginTop: 16 }}>
+        <View style={{ marginTop: 18 }}>
           <Text
             style={{
               fontFamily: "Joan",
-              fontSize: 22,
+              fontSize: 20,
               color: "#060000",
-              marginBottom: 8,
+              marginBottom: 6,
             }}
           >
             Day Summary
@@ -455,20 +451,22 @@ export default function CalendarFoodLog({
           )}
 
           {/* Workouts */}
-          <Text style={{ fontFamily: "Joan", fontSize: 18, color: "#355D73" }}>
+          <Text
+            style={{ fontFamily: "Joan", fontSize: 16, color: "#355D73" }}
+          >
             Workouts
           </Text>
           {selectedDate && completedWorkouts[selectedDate]?.length > 0 ? (
             completedWorkouts[selectedDate].map((w, idx) => (
               <Text
                 key={`w-${idx}`}
-                style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}
+                style={{ fontFamily: "Joan", fontSize: 15, color: "#060000" }}
               >
                 • {w.name}
               </Text>
             ))
           ) : (
-            <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#777" }}>
+            <Text style={{ fontFamily: "Joan", fontSize: 15, color: "#777" }}>
               No workouts logged.
             </Text>
           )}
@@ -477,7 +475,7 @@ export default function CalendarFoodLog({
           <Text
             style={{
               fontFamily: "Joan",
-              fontSize: 18,
+              fontSize: 16,
               color: "#355D73",
               marginTop: 10,
             }}
@@ -490,7 +488,7 @@ export default function CalendarFoodLog({
               keyExtractor={(_, idx) => `f-${idx}`}
               renderItem={({ item }) => (
                 <Text
-                  style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}
+                  style={{ fontFamily: "Joan", fontSize: 15, color: "#060000" }}
                 >
                   • {item.name} — {item.amount}
                   {item.unit}
@@ -499,7 +497,7 @@ export default function CalendarFoodLog({
               scrollEnabled={false}
             />
           ) : (
-            <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#777" }}>
+            <Text style={{ fontFamily: "Joan", fontSize: 15, color: "#777" }}>
               No foods logged. Tap “Add Food”.
             </Text>
           )}
@@ -523,15 +521,15 @@ export default function CalendarFoodLog({
           <View
             style={{
               backgroundColor: "#FFF",
-              borderTopLeftRadius: 16,
-              borderTopRightRadius: 16,
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
               padding: 16,
             }}
           >
             <Text
               style={{
                 fontFamily: "Joan",
-                fontSize: 22,
+                fontSize: 20,
                 color: "#060000",
                 textAlign: "center",
                 marginBottom: 12,
@@ -655,7 +653,7 @@ export default function CalendarFoodLog({
                 style={{
                   paddingVertical: 12,
                   paddingHorizontal: 18,
-                  borderRadius: 12,
+                  borderRadius: 999,
                   backgroundColor: "#A4A4A4",
                 }}
               >
@@ -671,7 +669,7 @@ export default function CalendarFoodLog({
                 style={{
                   paddingVertical: 12,
                   paddingHorizontal: 18,
-                  borderRadius: 12,
+                  borderRadius: 999,
                   backgroundColor: "#E6B82C",
                 }}
               >
@@ -691,7 +689,7 @@ export default function CalendarFoodLog({
         </View>
       </Modal>
 
-      {/* iOS Unit Picker (simple + reliable) */}
+      {/* iOS Unit Picker */}
       <Modal
         visible={unitModalOpen}
         transparent
@@ -719,8 +717,8 @@ export default function CalendarFoodLog({
           <View
             style={{
               backgroundColor: "#FFF",
-              borderTopLeftRadius: 16,
-              borderTopRightRadius: 16,
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
               paddingTop: 8,
               paddingBottom: 12,
             }}
@@ -729,7 +727,11 @@ export default function CalendarFoodLog({
               selectedValue={foodUnit}
               onValueChange={(val) => finishUnitPick(val)}
               style={{ height: 216, width: "100%" }}
-              itemStyle={{ fontFamily: "Joan", fontSize: 18, color: "#060000" }}
+              itemStyle={{
+                fontFamily: "Joan",
+                fontSize: 18,
+                color: "#060000",
+              }}
             >
               <Picker.Item label="grams (g)" value="g" />
               <Picker.Item label="ounces (oz)" value="oz" />

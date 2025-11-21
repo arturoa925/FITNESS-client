@@ -13,7 +13,6 @@ export default function ProfileAvatarMenu({ navigation, style, onLogout, profile
         if (!profilePicture) {
           const v = await SecureStore.getItemAsync("profilePicture");
           if (isMounted && v) setStoredPhoto(v);
-          if (isMounted) { try { console.log("[ProfilePic] loaded from SecureStore:", v); } catch (_) {} }
         }
       } catch (e) {
         // ignore
@@ -49,7 +48,7 @@ const handleLogout = async () => {
     await SecureStore.deleteItemAsync("profilePicture");
     navigation?.replace?.("Welcome");
   } catch (e) {
-    console.log("[ProfilePic] Logout error:", e);
+    console.error("[ProfilePic] Logout error:", e);
   }
 };
 
@@ -60,9 +59,6 @@ const handleLogout = async () => {
     if (profilePicture?.uri || profilePicture?.width || profilePicture?.height) return profilePicture;
     return { uri: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAp0B2x0d2oQAAAAASUVORK5CYII=" };
   })();
-  try {
-    console.log("[ProfilePic] using source:", typeof resolvedPhoto === "object" && resolvedPhoto.uri ? resolvedPhoto.uri : "local-asset");
-  } catch (_) {}
 
   return (
     <View style={style}>
@@ -71,13 +67,11 @@ const handleLogout = async () => {
         <Image
           source={resolvedPhoto}
           key={typeof resolvedPhoto === "object" && resolvedPhoto.uri ? resolvedPhoto.uri : "avatar-fallback"}
-          onLoad={() => { try { console.log("[ProfilePic] image loaded"); } catch (_) {} }}
           onError={() => {
             // Only mark error for remote URIs, not local fallbacks like SVG
             if (typeof resolvedPhoto === "object" && resolvedPhoto.uri) {
               setImgError(true);
             }
-            try { console.log("[ProfilePic] image failed, falling back"); } catch (_) {}
           }}
           style={{ width: 45, height: 45, borderRadius: 30, backgroundColor: "#E6E6E6" }}
           resizeMode="cover"

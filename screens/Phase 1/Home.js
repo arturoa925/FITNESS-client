@@ -82,7 +82,6 @@ const fetchCurrentProgram = async (userId, token, baseURL) => {
   if (!userId || !token) return null;
   const url = `${baseURL}/users/${userId}/training-programs`;
   try {
-    console.log("[Home] GET", url);
     const res = await fetch(url, {
       headers: {
         "Content-Type": "application/json",
@@ -92,13 +91,8 @@ const fetchCurrentProgram = async (userId, token, baseURL) => {
         Authorization: `Bearer ${token}`,
       },
     });
-    console.log("[Home] /training-programs status", res.status);
     if (!res.ok) return null;
     const data = await res.json().catch(() => null);
-    console.log(
-      "[Home] /training-programs payload",
-      Array.isArray(data) ? data.map((p) => ({ id: p?.id, name: p?.name })) : data?.id
-    );
     if (Array.isArray(data) && data.length) return data[0];
     return data;
   } catch (err) {
@@ -189,7 +183,6 @@ export default function Home({ navigation, route }) {
         return;
       }
       const baseURL = resolveApiBase();
-      console.log("[Home] handleOpenSessions baseURL", baseURL);
       const token = await SecureStore.getItemAsync("authToken");
       if (!token) {
         Alert.alert("Authentication required", "Your session expired. Please sign in again.");
@@ -199,7 +192,6 @@ export default function Home({ navigation, route }) {
 
       // Prefer the latest from the dedicated endpoint
       let program = await fetchCurrentProgram(storedId, token, baseURL);
-      console.log("[Home] handleOpenSessions program", program?.id, program?.name);
 
       // If we landed here right after subscribing, also consider a recent payload
       if (!program && route?.params?.subscription) {
@@ -219,7 +211,7 @@ export default function Home({ navigation, route }) {
         totalWeeks: weeks?.length || Number(program?.duration) || 0,
       });
     } catch (e) {
-      console.log("[Home] handleOpenSessions error:", e);
+      console.error("[Home] handleOpenSessions error:", e);
       Alert.alert("Error", "Could not load your training program.");
     } finally {
       setSessionsLoading(false);
@@ -237,13 +229,9 @@ export default function Home({ navigation, route }) {
         if (isActive) {
           setCalendarUserId(resolvedUserId);
           setCalendarAuthToken(token || null);
-          console.log("[Home] calendar creds", {
-            userId: resolvedUserId,
-            hasToken: !!token,
-          });
         }
       } catch (e) {
-        console.log("[Home] calendar creds error:", e);
+        console.error("[Home] calendar creds error:", e);
       }
     })();
     return () => {
@@ -307,7 +295,6 @@ export default function Home({ navigation, route }) {
             return;
           }
           const baseURL = resolveApiBase();
-          console.log("[Home] focus baseURL", baseURL);
           const token = await SecureStore.getItemAsync("authToken");
           const res = await fetch(`${baseURL}/users/${storedId}`, {
             headers: {
@@ -324,12 +311,6 @@ export default function Home({ navigation, route }) {
             return;
           }
           const data = await res.json();
-          console.log(
-            "[Home] /users me payload keys",
-            Object.keys(data || {}),
-            "has trainingPrograms",
-            Array.isArray(data?.trainingPrograms)
-          );
           // Resolve program and weeks from common shapes
           let program =
             (Array.isArray(data?.trainingPrograms) &&
@@ -340,10 +321,6 @@ export default function Home({ navigation, route }) {
           if (!program) {
             program = await fetchCurrentProgram(storedId, token, baseURL);
           }
-          console.log(
-            "[Home] current program source:",
-            program?.name || program?.slug || "(none)"
-          );
           const weeksArr =
             deriveWeeksFromProgram(program, program?.duration) ||
             (Array.isArray(data?.weeks) ? data.weeks : []);
@@ -375,7 +352,7 @@ export default function Home({ navigation, route }) {
               noProgram: false,
             });
         } catch (e) {
-          console.log("[Home] week fetch error:", e);
+          console.error("[Home] week fetch error:", e);
           if (isActive)
             setWeekInfo({ current: null, total: null, noProgram: true });
         }
@@ -419,13 +396,6 @@ export default function Home({ navigation, route }) {
           return;
         }
         const catalog = await res.json();
-        // Try to match robustly with aliases
-        console.log(
-          "[catalog]",
-          Array.isArray(catalog)
-            ? catalog.map((p) => ({ name: p?.name, slug: p?.slug, id: p?.id }))
-            : catalog
-        );
         let selected = null;
         if (Array.isArray(catalog)) {
           // 1) Exact slug/key/id equality (case-insensitive)
@@ -465,7 +435,6 @@ export default function Home({ navigation, route }) {
               }) || null;
           }
         }
-        console.log("[selected]", selected?.name, selected?.slug, selected?.id);
         if (!selected) {
           navigation.navigate("ProgramDetails", {
             programName: label || "Program",
@@ -483,7 +452,7 @@ export default function Home({ navigation, route }) {
           source: "catalog",
         });
       } catch (e) {
-        console.log("[Home] handleOpenCatalogDetails error:", e);
+        console.error("[Home] handleOpenCatalogDetails error:", e);
         navigation.navigate("ProgramDetails", {
           programName: label || "Program",
           program: null,
@@ -627,7 +596,7 @@ export default function Home({ navigation, route }) {
 
                 {/* see sweat button on the right */}
               <TouchableOpacity
-                onPress={() => { console.log("[Home] See Sweat tapped"); handleOpenSessions(); }}
+                onPress={handleOpenSessions}
                 disabled={sessionsLoading}
                 style={{
                   backgroundColor: "#E6B82C",
