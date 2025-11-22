@@ -294,31 +294,73 @@ export default function CalendarFoodLog({
         style={{
           width: maxWidth * 0.95,
           alignSelf: "center",
-          backgroundColor: "#FFFFFF",
-          borderRadius: 16,
-          overflow: "hidden",
+          backgroundColor: "#F9FAFB",
+          borderRadius: 20,
           marginTop: 16,
-          padding: 14,
+          padding: 16,
+          borderWidth: 1,
+          borderColor: "#E5E7EB",
           shadowColor: "#000",
-          shadowOpacity: 0.08,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 3,
+          shadowOpacity: 0.04,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 2,
         }}
       >
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 8,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: "Joan",
+              fontSize: 18,
+              color: "#111827",
+            }}
+          >
+            Calendar &amp; Log
+          </Text>
+          <Text
+            style={{
+              fontFamily: "Joan",
+              fontSize: 13,
+              color: "#6B7280",
+            }}
+          >
+            Tap a day to see details
+          </Text>
+        </View>
         <Calendar
-          style={{ borderRadius: 12 }}
+          style={{
+            borderRadius: 16,
+            backgroundColor: "#FFFFFF",
+            paddingVertical: 8,
+          }}
           theme={{
-            todayTextColor: "#5492DA",
-            arrowColor: "#355D73",
-            textDayFontFamily: "Joan",
-            textMonthFontFamily: "Joan",
-            textDayHeaderFontFamily: "Joan",
-            monthTextColor: "#060000",
             calendarBackground: "#FFFFFF",
-            textDayFontSize: 20,
-            textMonthFontSize: 24,
-            textDayHeaderFontSize: 14,
+
+            monthTextColor: "#111827",
+            textMonthFontFamily: "Joan",
+            textMonthFontSize: 22,
+
+            textDayFontFamily: "Joan",
+            textDayFontSize: 18,
+            dayTextColor: "#111827",
+            textDisabledColor: "#9CA3AF",
+
+            textDayHeaderFontFamily: "Joan",
+            textDayHeaderFontSize: 13,
+            textSectionTitleColor: "#6B7280",
+
+            todayTextColor: "#E6B82C",
+            selectedDayBackgroundColor: "#355D73",
+            selectedDayTextColor: "#FFFFFF",
+            arrowColor: "#355D73",
+            dotColor: "#E6B82C",
           }}
           markingType="multi-dot"
           markedDates={markedDates}
@@ -345,7 +387,7 @@ export default function CalendarFoodLog({
               style={{
                 width: 10,
                 height: 10,
-                borderRadius: 5,
+                borderRadius: 999,
                 backgroundColor: "#355D73",
               }}
             />
@@ -360,7 +402,7 @@ export default function CalendarFoodLog({
               style={{
                 width: 10,
                 height: 10,
-                borderRadius: 5,
+                borderRadius: 999,
                 backgroundColor: "#E6B82C",
               }}
             />
@@ -381,7 +423,13 @@ export default function CalendarFoodLog({
             alignItems: "center",
           }}
         >
-          <Text style={{ fontFamily: "Joan", fontSize: 18, color: "#060000" }}>
+          <Text
+            style={{
+              fontFamily: "Joan",
+              fontSize: 16,
+              color: "#4B5563",
+            }}
+          >
             {formattedSelectedLabel}
           </Text>
           <TouchableOpacity
@@ -395,7 +443,7 @@ export default function CalendarFoodLog({
             style={{
               backgroundColor: "#E6B82C",
               paddingVertical: 8,
-              paddingHorizontal: 14,
+              paddingHorizontal: 18,
               borderRadius: 999,
             }}
           >
@@ -413,12 +461,21 @@ export default function CalendarFoodLog({
         </View>
 
         {/* Day details */}
-        <View style={{ marginTop: 18 }}>
+        <View
+          style={{
+            marginTop: 18,
+            backgroundColor: "#FFFFFF",
+            borderRadius: 16,
+            padding: 14,
+            borderWidth: 1,
+            borderColor: "#E5E7EB",
+          }}
+        >
           <Text
             style={{
               fontFamily: "Joan",
-              fontSize: 20,
-              color: "#060000",
+              fontSize: 18,
+              color: "#111827",
               marginBottom: 6,
             }}
           >
@@ -452,7 +509,13 @@ export default function CalendarFoodLog({
 
           {/* Workouts */}
           <Text
-            style={{ fontFamily: "Joan", fontSize: 16, color: "#355D73" }}
+            style={{
+              fontFamily: "Joan",
+              fontSize: 16,
+              color: "#355D73",
+              marginTop: 8,
+              marginBottom: 4,
+            }}
           >
             Workouts
           </Text>
@@ -460,13 +523,13 @@ export default function CalendarFoodLog({
             completedWorkouts[selectedDate].map((w, idx) => (
               <Text
                 key={`w-${idx}`}
-                style={{ fontFamily: "Joan", fontSize: 15, color: "#060000" }}
+                style={{ fontFamily: "Joan", fontSize: 15, color: "#111827" }}
               >
                 • {w.name}
               </Text>
             ))
           ) : (
-            <Text style={{ fontFamily: "Joan", fontSize: 15, color: "#777" }}>
+            <Text style={{ fontFamily: "Joan", fontSize: 15, color: "#9CA3AF" }}>
               No workouts logged.
             </Text>
           )}
@@ -477,7 +540,7 @@ export default function CalendarFoodLog({
               fontFamily: "Joan",
               fontSize: 16,
               color: "#355D73",
-              marginTop: 10,
+              marginTop: 12,
             }}
           >
             Foods
@@ -488,7 +551,7 @@ export default function CalendarFoodLog({
               keyExtractor={(_, idx) => `f-${idx}`}
               renderItem={({ item }) => (
                 <Text
-                  style={{ fontFamily: "Joan", fontSize: 15, color: "#060000" }}
+                  style={{ fontFamily: "Joan", fontSize: 15, color: "#111827" }}
                 >
                   • {item.name} — {item.amount}
                   {item.unit}
@@ -497,7 +560,7 @@ export default function CalendarFoodLog({
               scrollEnabled={false}
             />
           ) : (
-            <Text style={{ fontFamily: "Joan", fontSize: 15, color: "#777" }}>
+            <Text style={{ fontFamily: "Joan", fontSize: 15, color: "#9CA3AF" }}>
               No foods logged. Tap “Add Food”.
             </Text>
           )}
