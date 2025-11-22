@@ -236,6 +236,78 @@ export default function CalendarFoodLog({
     }
   };
 
+  // Delete food helper
+  const deleteFood = async (dateStr, food) => {
+    if (!userId || !authToken) {
+      Alert.alert("Unable to remove food", "Missing user credentials.");
+      return;
+    }
+
+    if (!food?.id) {
+      Alert.alert(
+        "Unable to remove food",
+        "This food item is missing an id. Try refreshing."
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Remove food",
+      `Remove "${food.name}" from ${dateStr}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const res = await fetch(
+                `${API_BASE_URL}/users/${userId}/calendar/foods`,
+                {
+                  method: "DELETE",
+                  headers: {
+                    Authorization: `Bearer ${authToken}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    date: dateStr,
+                    foodId: food.id,
+                  }),
+                }
+              );
+
+              if (!res.ok) {
+                console.error(
+                  "Failed to delete food, status:",
+                  res.status
+                );
+                Alert.alert(
+                  "Unable to remove food",
+                  "Please try again."
+                );
+                return;
+              }
+
+              const updatedCalendar = await res.json();
+
+              // Sync this date's foods from the server response
+              setFoodsByDate((prev) => ({
+                ...prev,
+                [dateStr]: updatedCalendar.foods || [],
+              }));
+            } catch (err) {
+              console.error("Error deleting food:", err);
+              Alert.alert(
+                "Unable to remove food",
+                "Please check your connection and try again."
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
   // iOS unit picker flow: close food sheet → open wheel → pick → reopen food sheet
   const openUnitPicker = () => {
     setFoodModalOpen(false);
@@ -548,14 +620,45 @@ export default function CalendarFoodLog({
           {selectedDate && foodsByDate[selectedDate]?.length > 0 ? (
             <FlatList
               data={foodsByDate[selectedDate]}
-              keyExtractor={(_, idx) => `f-${idx}`}
+              keyExtractor={(item, idx) =>
+                item?.id ? String(item.id) : `f-${idx}`
+              }
               renderItem={({ item }) => (
-                <Text
-                  style={{ fontFamily: "Joan", fontSize: 15, color: "#111827" }}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingVertical: 4,
+                  }}
                 >
-                  • {item.name} — {item.amount}
-                  {item.unit}
-                </Text>
+                  <Text
+                    style={{
+                      fontFamily: "Joan",
+                      fontSize: 15,
+                      color: "#111827",
+                      flexShrink: 1,
+                    }}
+                    numberOfLines={1}
+                  >
+                    • {item.name} — {item.amount}
+                    {item.unit}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => deleteFood(selectedDate, item)}
+                    style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: "Joan",
+                        fontSize: 13,
+                        color: "#B91C1C",
+                      }}
+                    >
+                      Delete
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               )}
               scrollEnabled={false}
             />
