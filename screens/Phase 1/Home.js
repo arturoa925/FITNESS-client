@@ -86,8 +86,8 @@ const fetchCurrentProgram = async (userId, token, baseURL) => {
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        "Expires": "0",
+        Pragma: "no-cache",
+        Expires: "0",
         Authorization: `Bearer ${token}`,
       },
     });
@@ -185,7 +185,10 @@ export default function Home({ navigation, route }) {
       const baseURL = resolveApiBase();
       const token = await SecureStore.getItemAsync("authToken");
       if (!token) {
-        Alert.alert("Authentication required", "Your session expired. Please sign in again.");
+        Alert.alert(
+          "Authentication required",
+          "Your session expired. Please sign in again."
+        );
         navigation.navigate("Login");
         return;
       }
@@ -196,11 +199,20 @@ export default function Home({ navigation, route }) {
       // If we landed here right after subscribing, also consider a recent payload
       if (!program && route?.params?.subscription) {
         const sub = route.params.subscription;
-        program = sub?.trainingProgram || sub?.program || (Array.isArray(sub?.trainingPrograms) ? sub.trainingPrograms[0] : null) || null;
+        program =
+          sub?.trainingProgram ||
+          sub?.program ||
+          (Array.isArray(sub?.trainingPrograms)
+            ? sub.trainingPrograms[0]
+            : null) ||
+          null;
       }
 
       if (!program) {
-        Alert.alert("No training program", "You aren't enrolled in a program yet.");
+        Alert.alert(
+          "No training program",
+          "You aren't enrolled in a program yet."
+        );
         return;
       }
 
@@ -300,8 +312,8 @@ export default function Home({ navigation, route }) {
             headers: {
               "Content-Type": "application/json",
               "Cache-Control": "no-cache",
-              "Pragma": "no-cache",
-              "Expires": "0",
+              Pragma: "no-cache",
+              Expires: "0",
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
           });
@@ -339,8 +351,7 @@ export default function Home({ navigation, route }) {
               : [];
             const td = Number(w.totalDays) || daysArr.length;
             const cd =
-              Number(w.completedDays) ||
-              daysArr.filter(isDayCompleted).length;
+              Number(w.completedDays) || daysArr.filter(isDayCompleted).length;
             return acc + (td > 0 && cd >= td ? 1 : 0);
           }, 0);
           // Current week is the next one in progress
@@ -489,6 +500,13 @@ export default function Home({ navigation, route }) {
                   navigation={navigation}
                   onLogout={handleLogout}
                   profilePicture={user?.profilePicture}
+                  user={{
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    email: user.email,
+                    id: user.id,
+                    // password: userPasswordIfYouReallyStoreIt
+                  }}
                 />
               </View>
 
@@ -595,31 +613,31 @@ export default function Home({ navigation, route }) {
                 </Text>
 
                 {/* see sweat button on the right */}
-              <TouchableOpacity
-                onPress={handleOpenSessions}
-                disabled={sessionsLoading}
-                style={{
-                  backgroundColor: "#E6B82C",
-                  paddingVertical: 10,
-                  paddingHorizontal: 22,
-                  borderRadius: 20,
-                  minWidth: 110,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  opacity: sessionsLoading ? 0.6 : 1,
-                }}
-              >
-                <Text
+                <TouchableOpacity
+                  onPress={handleOpenSessions}
+                  disabled={sessionsLoading}
                   style={{
-                    color: "#000",
-                    fontSize: 20,
-                    fontFamily: "Joan",
-                    fontWeight: "600",
+                    backgroundColor: "#E6B82C",
+                    paddingVertical: 10,
+                    paddingHorizontal: 22,
+                    borderRadius: 20,
+                    minWidth: 110,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    opacity: sessionsLoading ? 0.6 : 1,
                   }}
                 >
-                  {sessionsLoading ? "Loading…" : "See Sweat"}
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={{
+                      color: "#000",
+                      fontSize: 20,
+                      fontFamily: "Joan",
+                      fontWeight: "600",
+                    }}
+                  >
+                    {sessionsLoading ? "Loading…" : "See Sweat"}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               {/* gradient progress bar */}
