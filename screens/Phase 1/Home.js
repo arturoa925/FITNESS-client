@@ -113,6 +113,51 @@ const isDayCompleted = (day) => {
   return false;
 };
 
+// Map a training program to its hero image
+const getProgramHeroImage = (program) => {
+  try {
+    if (!program) {
+      return require("../../assets/gym.jpeg");
+    }
+    const key = String(program.slug || program.name || "")
+      .toLowerCase()
+      .trim();
+
+    if (
+      key.includes("half-marathon") ||
+      key.includes("marathon")
+    ) {
+      return require("../../assets/marathon.jpeg");
+    }
+
+    if (
+      key.includes("hypertrophy") ||
+      key.includes("split") ||
+      key.includes("hybrid")
+    ) {
+      return require("../../assets/hybrid.jpeg");
+    }
+
+    if (key.includes("kettlebell")) {
+      return require("../../assets/kb2.jpeg");
+    }
+
+    if (key.includes("yoga")) {
+      return require("../../assets/yoga3.jpeg");
+    }
+
+    if (key.includes("calisthenics")) {
+      return require("../../assets/calis.jpeg");
+    }
+
+    // Fallback hero
+    return require("../../assets/gym.jpeg");
+  } catch (e) {
+    // In case require fails for some reason, use a safe fallback
+    return require("../../assets/gym.jpeg");
+  }
+};
+
 // * user context
 import { useUser } from "../../components/UserContext";
 
@@ -171,6 +216,7 @@ export default function Home({ navigation, route }) {
     total: null,
     noProgram: false,
   });
+  const [currentProgram, setCurrentProgram] = useState(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [calendarUserId, setCalendarUserId] = useState(null);
   const [calendarAuthToken, setCalendarAuthToken] = useState(null);
@@ -266,6 +312,9 @@ export default function Home({ navigation, route }) {
                 ? sub.trainingPrograms[0]
                 : null) ||
               null;
+            if (programFromSub && isActive) {
+              setCurrentProgram(programFromSub);
+            }
             const weeksArrSub =
               deriveWeeksFromProgram(
                 programFromSub,
@@ -332,6 +381,9 @@ export default function Home({ navigation, route }) {
             null;
           if (!program) {
             program = await fetchCurrentProgram(storedId, token, baseURL);
+          }
+          if (program && isActive) {
+            setCurrentProgram(program);
           }
           const weeksArr =
             deriveWeeksFromProgram(program, program?.duration) ||
@@ -571,7 +623,7 @@ export default function Home({ navigation, route }) {
                   style={[tw`mt-4`, { borderRadius: 16, overflow: "hidden" }]}
                 >
                   <Image
-                    source={require("../../assets/marathon.jpeg")}
+                    source={getProgramHeroImage(currentProgram)}
                     style={{
                       width: maxWidth * 0.8,
                       height: maxWidth * 0.6,
