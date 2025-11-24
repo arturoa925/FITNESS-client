@@ -742,6 +742,120 @@ export default function Home({ navigation, route }) {
                 Hybrid
               </Text>
 
+              {/* Kettlebell Burner */}
+              <Pressable
+                onPress={() =>
+                  handleOpenCatalogDetails("Kettlebell Burner", "kettlebell-burner")
+                }
+                style={({ pressed }) => [
+                  {
+                    transform: [{ scale: pressed ? 0.9 : 1 }],
+                    opacity: pressed ? 0.9 : 1,
+                  },
+                ]}
+              >
+                <Image
+                  source={require("../../assets/kb2.jpeg")}
+                  style={{
+                    width: maxWidth * 0.8,
+                    height: maxWidth * 0.6,
+                    alignSelf: "center",
+                    borderRadius: 12,
+                    marginTop: 100,
+                  }}
+                  resizeMode="cover"
+                />
+              </Pressable>
+              <Text
+                style={{
+                  color: "#060000ff",
+                  fontSize: 28,
+                  fontFamily: "Joan",
+                  fontWeight: "600",
+                  textAlign: "center",
+                  marginTop: 60,
+                }}
+              >
+                Kettlebell Burner
+              </Text>
+
+              {/* Yoga */}
+              <Pressable
+                onPress={() =>
+                  handleOpenCatalogDetails("Yoga Foundations", "yoga-foundations-3-week-reset")
+                }
+                style={({ pressed }) => [
+                  {
+                    transform: [{ scale: pressed ? 0.9 : 1 }],
+                    opacity: pressed ? 0.9 : 1,
+                  },
+                ]}
+              >
+                <Image
+                  source={require("../../assets/yoga3.jpeg")}
+                  style={{
+                    width: maxWidth * 0.8,
+                    height: maxWidth * 0.6,
+                    alignSelf: "center",
+                    borderRadius: 12,
+                    marginTop: 100,
+                  }}
+                  resizeMode="cover"
+                />
+              </Pressable>
+              <Text
+                style={{
+                  color: "#060000ff",
+                  fontSize: 28,
+                  fontFamily: "Joan",
+                  fontWeight: "600",
+                  textAlign: "center",
+                  marginTop: 60,
+                }}
+              >
+                Yoga Foundations
+              </Text>
+
+              {/* calisthenics */}
+              <Pressable
+                onPress={() =>
+                  handleOpenCatalogDetails("Calisthenics Foundations", "calisthenics-foundations-4-weeks")
+                }
+                style={({ pressed }) => [
+                  {
+                    transform: [{ scale: pressed ? 0.9 : 1 }],
+                    opacity: pressed ? 0.9 : 1,
+                  },
+                ]}
+              >
+                <Image
+                  source={require("../../assets/calis.jpeg")}
+                  style={{
+                    width: maxWidth * 0.8,
+                    height: maxWidth * 0.6,
+                    alignSelf: "center",
+                    borderRadius: 12,
+                    marginTop: 100,
+                  }}
+                  resizeMode="cover"
+                />
+              </Pressable>
+              <Text
+                style={{
+                  color: "#060000ff",
+                  fontSize: 28,
+                  fontFamily: "Joan",
+                  fontWeight: "600",
+                  textAlign: "center",
+                  marginTop: 60,
+                }}
+              >
+                Calisthenics Foundations
+              </Text>
+
+
+
+
               <View
                 style={{
                   backgroundColor: "#5492DA",
@@ -751,6 +865,8 @@ export default function Home({ navigation, route }) {
                   alignItems: "center",
                 }}
               >
+
+                
                 <Text
                   style={{
                     color: "#fff",
