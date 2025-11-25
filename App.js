@@ -15,6 +15,7 @@ import Welcome from "./screens/Phase 0/Welcome";
 import Register from "./screens/Phase 0/Register";
 import OutsideAuth from "./screens/Phase 0/OutsideAuth";
 import GoogleAuth from "./screens/Phase 0/GoogleAuth";
+import AuthGate from "./screens/Phase 0/AuthGate";
 
 // * phase 1 screens
 import Home from "./screens/Phase 1/Home";
@@ -57,8 +58,9 @@ export default function App() {
           <NavigationContainer>
             <Stack.Navigator
               screenOptions={{ headerShown: false }}
-              initialRouteName="Welcome"
+              initialRouteName="AuthGate"
             >
+              <Stack.Screen name="AuthGate" component={AuthGate} />
               <Stack.Screen name="Welcome" component={Welcome} />
               <Stack.Screen name="Register" component={Register} />
               <Stack.Screen name="OutsideAuth" component={OutsideAuth} />

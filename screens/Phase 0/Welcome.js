@@ -139,34 +139,112 @@ export default function Welcome({ navigation }) {
         return;
       }
 
-      // Quick-login path: no password typed → use saved token to fetch /users/me
+      // Quick-login path: no password typed → use saved token to fetch /users/me,
+      // with offline fallback to cachedUserProfile when possible.
       const token = await SecureStore.getItemAsync("authToken");
-      if (!token) {
-        Alert.alert("Sign in required", "Please sign in once with your password to enable quick Face ID login.");
+      const cachedJson = await SecureStore.getItemAsync("cachedUserProfile");
+      let cachedUser = null;
+      if (cachedJson) {
+        try {
+          cachedUser = JSON.parse(cachedJson);
+        } catch (_) {
+          cachedUser = null;
+        }
+      }
+
+      if (!token && !cachedUser) {
+        Alert.alert(
+          "Sign in required",
+          "Please sign in once with your password to enable quick Face ID login."
+        );
         return;
       }
 
       const baseURL = resolveApiBase();
-      const me = await fetch(`${baseURL}/users/me`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!me.ok) {
-        warn("Saved token rejected; please log in manually.", me.status);
-        Alert.alert("Session expired", "Please enter your password and sign in again.");
+      let profile = null;
+      let fromServer = false;
+
+      if (token) {
+        try {
+          const me = await fetch(`${baseURL}/users/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (me.ok) {
+            profile = await me.json();
+            fromServer = true;
+            json("/users/me", profile);
+          } else {
+            // Treat unauthorized as a true session expiry → force manual login
+            if (me.status === 401 || me.status === 403) {
+              warn("Saved token rejected; please log in manually.", me.status);
+              Alert.alert(
+                "Session expired",
+                "Please enter your password and sign in again."
+              );
+              return;
+            }
+            // Other status codes (e.g. 500) can fall back to cached profile if available
+            warn(
+              "Biometric quick login: /users/me not OK, will consider cached profile fallback.",
+              me.status
+            );
+          }
+        } catch (err) {
+          // Network or other fetch error → allow offline fallback
+          warn("Biometric quick login: /users/me fetch error", err);
+        }
+      }
+
+      let normalized;
+
+      if (fromServer && profile) {
+        normalized = {
+          id: profile.id || profile.user?.id,
+          email: profile.email || profile.user?.email || email,
+          firstName: profile.firstName || profile.user?.firstName,
+          lastName: profile.lastName || profile.user?.lastName,
+          profilePicture:
+            profile.profilePicture || profile.user?.profilePicture,
+          provider: profile.provider || profile.user?.provider || "local",
+          raw: profile,
+        };
+        json("Biometric quick-login user (server)", normalized);
+      } else if (cachedUser && (cachedUser.id || cachedUser.email)) {
+        // Offline / server error path: fall back to cached user profile
+        normalized = {
+          id: cachedUser.id || null,
+          email: cachedUser.email || email || null,
+          firstName: cachedUser.firstName || null,
+          lastName: cachedUser.lastName || null,
+          profilePicture: cachedUser.profilePicture || null,
+          provider: cachedUser.provider || "local",
+          raw: cachedUser.raw || cachedUser,
+        };
+        json("Biometric quick-login user (cached fallback)", normalized);
+      } else {
+        // No usable server profile and no cached profile → require manual login
+        Alert.alert(
+          "Sign in required",
+          "We couldn't restore your session. Please log in with your email and password."
+        );
         return;
       }
-      const profile = await me.json();
-      json("/users/me", profile);
 
-      const normalized = {
-        id: profile.id || profile.user?.id,
-        email: profile.email || profile.user?.email || email,
-        firstName: profile.firstName || profile.user?.firstName,
-        lastName: profile.lastName || profile.user?.lastName,
-        profilePicture: profile.profilePicture || profile.user?.profilePicture,
-        provider: profile.provider || profile.user?.provider || "local",
-        raw: profile,
-      };
-      json("Biometric quick-login user", normalized);
       setUser(normalized);
+      try {
+        await SecureStore.setItemAsync(
+          "cachedUserProfile",
+          JSON.stringify(normalized)
+        );
+        if (normalized.email) {
+          await SecureStore.setItemAsync(
+            "lastLoginEmail",
+            String(normalized.email).toLowerCase()
+          );
+        }
+      } catch (e) {
+        warn("Biometric quick login: failed to cache user profile", e);
+      }
 
       navigation.replace("Home");
     } catch (e) {
@@ -333,18 +411,48 @@ export default function Welcome({ navigation }) {
             };
             json("Normalized user", normalized);
             setUser(normalized);
+            try {
+              await SecureStore.setItemAsync(
+                "cachedUserProfile",
+                JSON.stringify(normalized)
+              );
+            } catch (e) {
+              warn("Welcome: failed to cache user profile", e);
+            }
           } else {
-            warn("Profile fetch failed", profileRes.status, await profileRes.text());
+            const minimal = { id: userId, email: normalizedEmail, provider: "local" };
+            warn(
+              "Profile fetch failed",
+              profileRes.status,
+              await profileRes.text()
+            );
             // If profile fetch fails, at least store minimal info so UI can render
-            setUser({ id: userId, email: normalizedEmail, provider: "local" });
+            setUser(minimal);
+            try {
+              await SecureStore.setItemAsync(
+                "cachedUserProfile",
+                JSON.stringify(minimal)
+              );
+            } catch (e) {
+              warn("Welcome: failed to cache minimal user profile", e);
+            }
           }
         } else {
           // No id/token in response; still set minimal context
           setUser({ email: normalizedEmail, provider: "local" });
         }
       } catch (e) {
+        const minimal = { email: normalizedEmail, provider: "local" };
         error("Profile fetch error", e);
-        setUser({ email: normalizedEmail, provider: "local" });
+        setUser(minimal);
+        try {
+          await SecureStore.setItemAsync(
+            "cachedUserProfile",
+            JSON.stringify(minimal)
+          );
+        } catch (err) {
+          warn("Welcome: failed to cache minimal user profile (catch)", err);
+        }
       }
 
       // Navigate to Home once context is populated
@@ -470,24 +578,37 @@ export default function Welcome({ navigation }) {
             );
         } catch (_) {}
 
-        // Hydrate context so UI can render avatar without waiting
+        // Hydrate context so UI can render avatar without waiting and cache profile
         try {
-          setUser((prev) => ({
-            ...(typeof prev === "object" && prev ? prev : {}),
-            id: userIdParam || (prev && prev.id) || null,
-            providerId: providerIdParam || (prev && prev.providerId) || null,
-            email: emailParam || (prev && prev.email) || null,
-            firstName: nameParam
-              ? String(nameParam).split(" ")[0]
-              : (prev && prev.firstName) || null,
+          const normalizedUser = {
+            id: userIdParam || null,
+            providerId: providerIdParam || null,
+            email: emailParam || null,
+            firstName: nameParam ? String(nameParam).split(" ")[0] : null,
             lastName: nameParam
               ? String(nameParam).split(" ").slice(1).join(" ")
-              : (prev && prev.lastName) || null,
-            profilePicture:
-              normalizedPhoto || (prev && prev.profilePicture) || null,
+              : null,
+            profilePicture: normalizedPhoto || null,
             provider: "github",
-            token: token || (prev && prev.token) || null,
+            token: token || null,
+          };
+
+          setUser((prev) => ({
+            ...(typeof prev === "object" && prev ? prev : {}),
+            ...normalizedUser,
           }));
+
+          try {
+            if (token) {
+              await SecureStore.setItemAsync("authToken", String(token));
+            }
+            await SecureStore.setItemAsync(
+              "cachedUserProfile",
+              JSON.stringify(normalizedUser)
+            );
+          } catch (e) {
+            warn("Welcome: failed to cache GitHub user profile", e);
+          }
         } catch (_) {}
 
         navigation.replace("OutsideAuth", {
@@ -572,19 +693,37 @@ export default function Welcome({ navigation }) {
           if (providerIdParam) await SecureStore.setItemAsync("providerId", String(providerIdParam));
         } catch (_) {}
 
-        // Optionally hydrate context immediately so UI can render avatar without waiting
+        // Hydrate context immediately so UI can render avatar and cache profile
         try {
+          const normalizedUser = {
+            id: userIdParam || null,
+            providerId: providerIdParam || null,
+            email: emailParam || null,
+            firstName: nameParam ? String(nameParam).split(" ")[0] : null,
+            lastName: nameParam
+              ? String(nameParam).split(" ").slice(1).join(" ")
+              : null,
+            profilePicture: normalizedPhoto || null,
+            provider: "google",
+            token: token || null,
+          };
+
           setUser((prev) => ({
             ...(typeof prev === "object" && prev ? prev : {}),
-            id: userIdParam || (prev && prev.id) || null,
-            providerId: providerIdParam || (prev && prev.providerId) || null,
-            email: emailParam || (prev && prev.email) || null,
-            firstName: nameParam ? String(nameParam).split(" ")[0] : (prev && prev.firstName) || null,
-            lastName: nameParam ? String(nameParam).split(" ").slice(1).join(" ") : (prev && prev.lastName) || null,
-            profilePicture: normalizedPhoto || (prev && prev.profilePicture) || null,
-            provider: "google",
-            token: token || (prev && prev.token) || null,
+            ...normalizedUser,
           }));
+
+          try {
+            if (token) {
+              await SecureStore.setItemAsync("authToken", String(token));
+            }
+            await SecureStore.setItemAsync(
+              "cachedUserProfile",
+              JSON.stringify(normalizedUser)
+            );
+          } catch (e) {
+            warn("Welcome: failed to cache Google user profile", e);
+          }
         } catch (_) {}
 
         navigation.replace("OutsideAuth", {
