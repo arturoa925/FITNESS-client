@@ -27,6 +27,7 @@ import { makeRedirectUri } from "expo-auth-session";
 import { useUser } from "../../components/UserContext";
 import { decode as atob } from "base-64";
 import { section, json, info, warn, error, success } from "../../components/logger";
+import { resolveApiBase } from "../../utils/api";
 
 export default function Welcome({ navigation }) {
   LogBox.ignoreLogs([
@@ -45,6 +46,8 @@ export default function Welcome({ navigation }) {
   const [password, setPassword] = useState("");
   const [biometricEmail, setBiometricEmail] = useState("");
   const [rateLimited, setRateLimited] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
   // Biometrics state
   const [biometricSupported, setBiometricSupported] = useState(false);
@@ -107,6 +110,16 @@ export default function Welcome({ navigation }) {
     })();
   }, []);
 
+  // Auto-clear rateLimited state after 15 minutes so the inline warning doesn't stick forever
+  useEffect(() => {
+    if (!rateLimited) return;
+    const timeout = setTimeout(() => {
+      setRateLimited(false);
+    }, 15 * 60 * 1000); // 15 minutes
+
+    return () => clearTimeout(timeout);
+  }, [rateLimited]);
+
   const handleBiometricLogin = async () => {
     if (authBusy) return;
     try {
@@ -133,7 +146,7 @@ export default function Welcome({ navigation }) {
         return;
       }
 
-      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const baseURL = resolveApiBase();
       const me = await fetch(`${baseURL}/users/me`, { headers: { Authorization: `Bearer ${token}` } });
       if (!me.ok) {
         warn("Saved token rejected; please log in manually.", me.status);
@@ -210,17 +223,25 @@ export default function Welcome({ navigation }) {
         if (!res.success) return; // user canceled or failed
       }
 
-      // Basic validation
-      if (!email || !password) {
-        Alert.alert("Missing info", "Please enter both email and password.");
+      // Normalize email (trim + lowercase) and validate inputs
+      const normalizedEmail = email.trim().toLowerCase();
+      let hasError = false;
+
+      if (!normalizedEmail) {
+        setEmailError("Email is required.");
+        hasError = true;
+      }
+
+      if (!password) {
+        setPasswordError("Password is required.");
+        hasError = true;
+      }
+
+      if (hasError) {
         return;
       }
 
-      // Base URL (iOS sim uses localhost; Android emu uses 10.0.2.2)
-      const baseURL =
-        Platform.OS === "android"
-          ? "http://10.0.2.2:3004"
-          : "http://localhost:3004";
+      const baseURL = resolveApiBase();
       const loginUrl = `${baseURL}/users/login`;
 
       // Login request
@@ -230,7 +251,7 @@ export default function Welcome({ navigation }) {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       });
 
       if (!response.ok) {
@@ -283,10 +304,10 @@ export default function Welcome({ navigation }) {
       if (refreshToken)
         await SecureStore.setItemAsync("refreshToken", String(refreshToken));
 
-      // Persist last email and biometric preference
-      await SecureStore.setItemAsync("lastLoginEmail", email);
+      // Persist last email and biometric preference (normalized)
+      await SecureStore.setItemAsync("lastLoginEmail", normalizedEmail);
       if (useBiometrics) {
-        await SecureStore.setItemAsync("biometricEmail", email);
+        await SecureStore.setItemAsync("biometricEmail", normalizedEmail);
         await SecureStore.setItemAsync("use_biometrics", "true");
       }
 
@@ -303,7 +324,7 @@ export default function Welcome({ navigation }) {
             // Normalize common fields; keep original object too
             const normalized = {
               id: profile.id || userId,
-              email: profile.email || email,
+              email: profile.email || normalizedEmail,
               firstName: profile.firstName || profile.given_name || null,
               lastName: profile.lastName || profile.family_name || null,
               profilePicture: profile.profilePicture || profile.picture || null,
@@ -315,18 +336,19 @@ export default function Welcome({ navigation }) {
           } else {
             warn("Profile fetch failed", profileRes.status, await profileRes.text());
             // If profile fetch fails, at least store minimal info so UI can render
-            setUser({ id: userId, email, provider: "local" });
+            setUser({ id: userId, email: normalizedEmail, provider: "local" });
           }
         } else {
           // No id/token in response; still set minimal context
-          setUser({ email, provider: "local" });
+          setUser({ email: normalizedEmail, provider: "local" });
         }
       } catch (e) {
         error("Profile fetch error", e);
-        setUser({ email, provider: "local" });
+        setUser({ email: normalizedEmail, provider: "local" });
       }
 
       // Navigate to Home once context is populated
+      setRateLimited(false);
       navigation.replace("Home");
     } catch (e) {
       error("/users/login error", e);
@@ -364,10 +386,7 @@ export default function Welcome({ navigation }) {
   // GitHub system-auth handler
   const handleGithubSignIn = async () => {
     try {
-      const baseURL =
-        Platform.OS === "android"
-          ? "http://10.0.2.2:3004"
-          : "http://localhost:3004";
+      const baseURL = resolveApiBase();
       // Use Expo AuthSession proxy so this works in Expo Go
       const redirectUri = makeRedirectUri({ useProxy: true });
       const authUrl = `${baseURL}/auth/github?mode=minimal&state=mobile&redirect_uri=${encodeURIComponent(
@@ -493,10 +512,7 @@ export default function Welcome({ navigation }) {
   // Google system-auth handler
   const handleGoogleSignIn = async () => {
     try {
-      const baseURL =
-        Platform.OS === "android"
-          ? "http://10.0.2.2:3004"
-          : "http://localhost:3004";
+      const baseURL = resolveApiBase();
       // Use Expo AuthSession proxy so this works in Expo Go
       const redirectUri = makeRedirectUri({ useProxy: true });
       const authUrl = `${baseURL}/auth/google?mode=minimal&state=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
@@ -645,7 +661,10 @@ export default function Welcome({ navigation }) {
                 <TextInput
                   placeholder="Email"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(val) => {
+                    setEmail(val);
+                    if (emailError) setEmailError("");
+                  }}
                   autoCapitalize="none"
                   keyboardType="email-address"
                   style={tw`bg-white rounded-xl px-4 py-3 mb-4`}
@@ -654,10 +673,27 @@ export default function Welcome({ navigation }) {
                   autoComplete="email"
                   returnKeyType="next"
                 />
+                {emailError ? (
+                  <Text
+                    style={[
+                      tw`mb-2`,
+                      {
+                        color: "#F97373",
+                        fontFamily: "Manrope",
+                        fontSize: bodySize - 1,
+                      },
+                    ]}
+                  >
+                    {emailError}
+                  </Text>
+                ) : null}
                 <TextInput
                   placeholder="Password"
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(val) => {
+                    setPassword(val);
+                    if (passwordError) setPasswordError("");
+                  }}
                   secureTextEntry
                   style={tw`bg-white rounded-xl px-4 py-3 mb-4`}
                   placeholderTextColor="#9CA3AF"
@@ -665,6 +701,20 @@ export default function Welcome({ navigation }) {
                   autoComplete="password"
                   returnKeyType="done"
                 />
+                {passwordError ? (
+                  <Text
+                    style={[
+                      tw`mb-2`,
+                      {
+                        color: "#F97373",
+                        fontFamily: "Manrope",
+                        fontSize: bodySize - 1,
+                      },
+                    ]}
+                  >
+                    {passwordError}
+                  </Text>
+                ) : null}
               </View>
 
               {/* face id section */}
@@ -731,10 +781,16 @@ export default function Welcome({ navigation }) {
                   {
                     width: maxWidth,
                     alignSelf: "center",
-                    backgroundColor: pressed ? "#5a9cc6" : "#8CBFDF",
+                    backgroundColor: authBusy
+                      ? "#9BB9CF"
+                      : pressed
+                      ? "#5a9cc6"
+                      : "#8CBFDF",
+                    opacity: authBusy ? 0.8 : 1,
                   },
                 ]}
                 onPress={handleLogin}
+                disabled={authBusy}
               >
                 <Text
                   style={[
@@ -742,7 +798,7 @@ export default function Welcome({ navigation }) {
                     { fontFamily: "Manrope" },
                   ]}
                 >
-                  Log In
+                  {authBusy ? "Logging in…" : "Log In"}
                 </Text>
               </Pressable>
 
