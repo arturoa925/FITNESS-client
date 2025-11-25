@@ -348,6 +348,135 @@ export default function Welcome({ navigation }) {
     }, [useBiometrics, biometricSupported, authBusy, email])
   );
 
+  // GitHub system-auth handler
+  const handleGithubSignIn = async () => {
+    try {
+      const baseURL =
+        Platform.OS === "android"
+          ? "http://10.0.2.2:3004"
+          : "http://localhost:3004";
+      // Use Expo AuthSession proxy so this works in Expo Go
+      const redirectUri = makeRedirectUri({ useProxy: true });
+      const authUrl = `${baseURL}/auth/github?mode=minimal&state=mobile&redirect_uri=${encodeURIComponent(
+        redirectUri
+      )}`;
+      section("GitHub auth session");
+      json("Start", { authUrl, redirectUri });
+
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrl,
+        redirectUri
+      );
+      json("GitHub result", result);
+
+      if (result.type === "success" && result.url) {
+        // Parse fragment after '#': token, email, name, photo, userId, providerId
+        const hash = result.url.split("#")[1] || "";
+        const params = new URLSearchParams(hash);
+        const token = params.get("token");
+        const emailParam = params.get("email");
+        const nameParam = params.get("name");
+        const photo = params.get("photo");
+        let userIdParam = params.get("userId");
+        let providerIdParam = params.get("providerId");
+
+        const normalizedPhoto =
+          typeof photo === "string" ? photo : null;
+
+        // Fallback: derive userId / providerId from JWT payload if not provided
+        if ((!userIdParam || !providerIdParam) && token) {
+          try {
+            const payloadPart = token.split(".")[1];
+            if (payloadPart) {
+              const normalized = payloadPart
+                .replace(/-/g, "+")
+                .replace(/_/g, "/");
+              const decoded = JSON.parse(atob(normalized));
+              userIdParam =
+                userIdParam || decoded?.id || decoded?.userId || null;
+              providerIdParam =
+                providerIdParam || decoded?.providerId || null;
+            }
+          } catch (_e) {
+            // ignore; best-effort only
+          }
+        }
+
+        json("GitHub parsed", {
+          token,
+          email: emailParam,
+          name: nameParam,
+          photo: normalizedPhoto,
+          userId: userIdParam,
+          providerId: providerIdParam,
+        });
+
+        // Persist avatar so ProfilePic can load it even if props are missing
+        try {
+          if (normalizedPhoto) {
+            await SecureStore.setItemAsync(
+              "profilePicture",
+              normalizedPhoto
+            );
+            try {
+              await Image.prefetch(normalizedPhoto);
+            } catch (_) {}
+          }
+        } catch (_) {}
+
+        // Persist userId and providerId for later use
+        try {
+          if (userIdParam)
+            await SecureStore.setItemAsync(
+              "userId",
+              String(userIdParam)
+            );
+          if (providerIdParam)
+            await SecureStore.setItemAsync(
+              "providerId",
+              String(providerIdParam)
+            );
+        } catch (_) {}
+
+        // Hydrate context so UI can render avatar without waiting
+        try {
+          setUser((prev) => ({
+            ...(typeof prev === "object" && prev ? prev : {}),
+            id: userIdParam || (prev && prev.id) || null,
+            providerId: providerIdParam || (prev && prev.providerId) || null,
+            email: emailParam || (prev && prev.email) || null,
+            firstName: nameParam
+              ? String(nameParam).split(" ")[0]
+              : (prev && prev.firstName) || null,
+            lastName: nameParam
+              ? String(nameParam).split(" ").slice(1).join(" ")
+              : (prev && prev.lastName) || null,
+            profilePicture:
+              normalizedPhoto || (prev && prev.profilePicture) || null,
+            provider: "github",
+            token: token || (prev && prev.token) || null,
+          }));
+        } catch (_) {}
+
+        navigation.replace("OutsideAuth", {
+          token,
+          email: emailParam,
+          name: nameParam,
+          photo: normalizedPhoto,
+          userId: userIdParam,
+          providerId: providerIdParam,
+          provider: "github",
+        });
+      }
+    } catch (e) {
+      console.log("[Welcome] GitHub sign-in error:", e);
+      Alert.alert(
+        "GitHub sign-in failed",
+        e?.message || "Please try again."
+      );
+    }
+  };
+
   // Google system-auth handler
   const handleGoogleSignIn = async () => {
     try {
@@ -664,6 +793,7 @@ export default function Welcome({ navigation }) {
                     style={tw`bg-white rounded-full w-12 h-12 items-center justify-center shadow`}
                     activeOpacity={0.8}
                     name="github"
+                    onPress={handleGithubSignIn}
                   >
                     <Svg
                       width={iconSize}
