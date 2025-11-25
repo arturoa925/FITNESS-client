@@ -615,6 +615,8 @@ export default function Home({ navigation, route }) {
                       aspectRatio: 16 / 10,
                     }}
                     resizeMode="cover"
+                    accessible={false}
+                    importantForAccessibility="no"
                   />
                 </View>
 
@@ -651,6 +653,9 @@ export default function Home({ navigation, route }) {
                       borderRadius: 12,
                     }}
                     resizeMode="cover"
+                    accessible={false}
+                    importantForAccessibility="no"
+                    accessibilityIgnoresInvertColors
                   />
                 </View>
               </View>
@@ -688,6 +693,13 @@ export default function Home({ navigation, route }) {
                 <TouchableOpacity
                   onPress={handleOpenSessions}
                   disabled={sessionsLoading}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    sessionsLoading
+                      ? "Loading your training sessions"
+                      : "See your training sessions"
+                  }
+                  accessibilityHint="Opens your current training program sessions."
                   style={{
                     backgroundColor: "#E6B82C",
                     paddingVertical: 10,
@@ -717,6 +729,9 @@ export default function Home({ navigation, route }) {
 
               {/* New section: Start a New Training Program */}
               <View
+                accessible={true}
+                accessibilityRole="header"
+                accessibilityLabel="Start a new training program"
                 style={{
                   backgroundColor: "#5492DA",
                   paddingVertical: 20,
@@ -745,6 +760,9 @@ export default function Home({ navigation, route }) {
                     "half-marathon-8-week-prep"
                   )
                 }
+                accessibilityRole="button"
+                accessibilityLabel="Open Marathon training program details"
+                accessibilityHint="Shows details and lets you enroll in the Marathon training program."
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],
@@ -782,6 +800,9 @@ export default function Home({ navigation, route }) {
                 onPress={() =>
                   handleOpenCatalogDetails("Hybrid", "hypertrophy-split")
                 }
+                accessibilityRole="button"
+                accessibilityLabel="Open Hybrid training program details"
+                accessibilityHint="Shows details and lets you enroll in the Hybrid strength and hypertrophy program."
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],
@@ -819,6 +840,9 @@ export default function Home({ navigation, route }) {
                 onPress={() =>
                   handleOpenCatalogDetails("Kettlebell Burner", "kettlebell-burner")
                 }
+                accessibilityRole="button"
+                accessibilityLabel="Open Kettlebell Burner training program details"
+                accessibilityHint="Shows details and lets you enroll in the Kettlebell Burner program."
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],
@@ -854,8 +878,14 @@ export default function Home({ navigation, route }) {
               {/* Yoga */}
               <Pressable
                 onPress={() =>
-                  handleOpenCatalogDetails("Yoga Foundations", "yoga-foundations-3-week-reset")
+                  handleOpenCatalogDetails(
+                    "Yoga Foundations",
+                    "yoga-foundations-3-week-reset"
+                  )
                 }
+                accessibilityRole="button"
+                accessibilityLabel="Open Yoga Foundations training program details"
+                accessibilityHint="Shows details and lets you enroll in the Yoga Foundations reset program."
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],
@@ -891,8 +921,14 @@ export default function Home({ navigation, route }) {
               {/* calisthenics */}
               <Pressable
                 onPress={() =>
-                  handleOpenCatalogDetails("Calisthenics Foundations", "calisthenics-foundations-4-weeks")
+                  handleOpenCatalogDetails(
+                    "Calisthenics Foundations",
+                    "calisthenics-foundations-4-weeks"
+                  )
                 }
+                accessibilityRole="button"
+                accessibilityLabel="Open Calisthenics Foundations training program details"
+                accessibilityHint="Shows details and lets you enroll in the Calisthenics Foundations program."
                 style={({ pressed }) => [
                   {
                     transform: [{ scale: pressed ? 0.9 : 1 }],
@@ -929,6 +965,9 @@ export default function Home({ navigation, route }) {
 
 
               <View
+                accessible={true}
+                accessibilityRole="header"
+                accessibilityLabel="Daily Reps"
                 style={{
                   backgroundColor: "#5492DA",
                   paddingVertical: 20,
@@ -966,6 +1005,9 @@ export default function Home({ navigation, route }) {
 
               <TouchableOpacity
                 onPress={() => navigation.navigate("DailyGrind")}
+                accessibilityRole="button"
+                accessibilityLabel="Generate a daily workout"
+                accessibilityHint="Opens the Daily Grind screen to generate a fresh workout."
                 style={{
                   backgroundColor: "#E6B82C",
                   paddingVertical: 10,
@@ -990,6 +1032,9 @@ export default function Home({ navigation, route }) {
               </TouchableOpacity>
 
               <View
+                accessible={true}
+                accessibilityRole="header"
+                accessibilityLabel="View your consistency"
                 style={{
                   backgroundColor: "#5492DA",
                   paddingVertical: 20,
@@ -1011,6 +1056,18 @@ export default function Home({ navigation, route }) {
               </View>
 
               {/* Calendar & Day Log */}
+              <Text
+                accessibilityRole="text"
+                accessibilityLabel="Calendar view showing your completed workouts and logged foods."
+                style={{
+                  position: "absolute",
+                  height: 0,
+                  width: 0,
+                  opacity: 0,
+                }}
+              >
+                Calendar view showing your completed workouts and logged foods.
+              </Text>
 
               <CalendarFoodLog
                 maxWidth={maxWidth}

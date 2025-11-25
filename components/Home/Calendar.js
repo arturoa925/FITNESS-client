@@ -345,6 +345,8 @@ export default function CalendarFoodLog({
           }}
         >
           <Text
+            accessibilityRole="header"
+            accessibilityLabel="Calendar and log. Tap a day to see your workouts and foods for that date."
             style={{
               fontFamily: "Joan",
               fontSize: 18,
@@ -363,6 +365,18 @@ export default function CalendarFoodLog({
             Tap a day to see details
           </Text>
         </View>
+        <Text
+          accessibilityRole="text"
+          accessibilityLabel="Calendar view. Blue dots show completed workouts. Yellow dots show foods logged. Tap a day to load its summary below."
+          style={{
+            position: "absolute",
+            width: 0,
+            height: 0,
+            opacity: 0,
+          }}
+        >
+          Calendar legend
+        </Text>
         <Calendar
           style={{
             borderRadius: 16,
@@ -469,6 +483,13 @@ export default function CalendarFoodLog({
               }
               openFoodModal(selectedDate);
             }}
+            accessibilityRole="button"
+            accessibilityLabel={
+              selectedDate
+                ? `Add food for ${selectedDate}`
+                : "Add food. Select a date first."
+            }
+            accessibilityHint="Opens a form to log food for the selected day."
             style={{
               backgroundColor: "#E6B82C",
               paddingVertical: 8,
@@ -501,6 +522,8 @@ export default function CalendarFoodLog({
           }}
         >
           <Text
+            accessibilityRole="header"
+            accessibilityLabel="Day summary. Workouts and foods for the selected date."
             style={{
               fontFamily: "Joan",
               fontSize: 18,
@@ -538,6 +561,8 @@ export default function CalendarFoodLog({
 
           {/* Workouts */}
           <Text
+            accessibilityRole="header"
+            accessibilityLabel="Workouts for the selected date"
             style={{
               fontFamily: "Joan",
               fontSize: 16,
@@ -565,6 +590,8 @@ export default function CalendarFoodLog({
 
           {/* Foods */}
           <Text
+            accessibilityRole="header"
+            accessibilityLabel="Foods logged for the selected date"
             style={{
               fontFamily: "Joan",
               fontSize: 16,
@@ -603,6 +630,13 @@ export default function CalendarFoodLog({
                   </Text>
                   <TouchableOpacity
                     onPress={() => deleteFood(selectedDate, item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      selectedDate
+                        ? `Delete ${item.name} logged for ${selectedDate}`
+                        : `Delete ${item.name} from this day`
+                    }
+                    accessibilityHint="Removes this food entry from your calendar."
                     style={{ paddingHorizontal: 8, paddingVertical: 4 }}
                   >
                     <Text
@@ -650,6 +684,12 @@ export default function CalendarFoodLog({
             }}
           >
             <Text
+              accessibilityRole="header"
+              accessibilityLabel={
+                selectedDate
+                  ? `Add food for ${selectedDate}`
+                  : "Add food"
+              }
               style={{
                 fontFamily: "Joan",
                 fontSize: 20,
@@ -665,6 +705,8 @@ export default function CalendarFoodLog({
               placeholder="Food name (e.g., Chicken Breast)"
               value={foodName}
               onChangeText={setFoodName}
+              accessibilityLabel="Food name"
+              accessibilityHint="Enter the name of the food you are logging."
               style={{
                 borderWidth: 1,
                 borderColor: "#ddd",
@@ -685,6 +727,8 @@ export default function CalendarFoodLog({
                 maxLength={5}
                 value={foodAmount}
                 onChangeText={setFoodAmount}
+                accessibilityLabel="Amount"
+                accessibilityHint="Enter the quantity for this food."
                 style={{
                   width: 90,
                   height: 44,
@@ -717,6 +761,8 @@ export default function CalendarFoodLog({
                     mode="dropdown"
                     style={{ height: 44, width: "100%" }}
                     dropdownIconColor="#060000"
+                    accessibilityLabel="Unit"
+                    accessibilityHint="Select the measurement unit for this food amount."
                   >
                     <Picker.Item label="grams (g)" value="g" />
                     <Picker.Item label="ounces (oz)" value="oz" />
@@ -729,6 +775,21 @@ export default function CalendarFoodLog({
               ) : (
                 <TouchableOpacity
                   onPress={openUnitPicker}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Unit. Currently ${
+                    foodUnit === "g"
+                      ? "grams"
+                      : foodUnit === "oz"
+                      ? "ounces"
+                      : foodUnit === "ml"
+                      ? "milliliters"
+                      : foodUnit === "cup"
+                      ? "cups"
+                      : foodUnit === "tbsp"
+                      ? "tablespoons"
+                      : "teaspoons"
+                  }.`}
+                  accessibilityHint="Opens a picker to choose the measurement unit for this food amount."
                   style={{
                     flex: 1,
                     height: 44,
@@ -773,6 +834,9 @@ export default function CalendarFoodLog({
             >
               <TouchableOpacity
                 onPress={() => setFoodModalOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel adding food"
+                accessibilityHint="Closes this form without saving."
                 style={{
                   paddingVertical: 12,
                   paddingHorizontal: 18,
@@ -789,6 +853,9 @@ export default function CalendarFoodLog({
 
               <TouchableOpacity
                 onPress={addFood}
+                accessibilityRole="button"
+                accessibilityLabel="Save food"
+                accessibilityHint="Saves this food entry to your calendar for the selected day."
                 style={{
                   paddingVertical: 12,
                   paddingHorizontal: 18,
@@ -846,6 +913,18 @@ export default function CalendarFoodLog({
               paddingBottom: 12,
             }}
           >
+            <Text
+              accessibilityRole="header"
+              accessibilityLabel="Select measurement unit for food amount."
+              style={{
+                position: "absolute",
+                width: 0,
+                height: 0,
+                opacity: 0,
+              }}
+            >
+              Unit picker
+            </Text>
             <Picker
               selectedValue={foodUnit}
               onValueChange={(val) => finishUnitPick(val)}

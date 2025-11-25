@@ -401,10 +401,24 @@ const handleLogout = async () => {
   return (
     <View style={style}>
       {/* Avatar */}
-      <TouchableOpacity onPress={() => setOpen(true)} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+      <TouchableOpacity
+        onPress={() => setOpen(true)}
+        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+        accessibilityRole="button"
+        accessibilityLabel={
+          user && (user.firstName || user.lastName)
+            ? `${user.firstName || ""}${user.lastName ? ` ${user.lastName}` : ""} account menu`
+            : "Open account menu"
+        }
+        accessibilityHint="Opens account settings and logout options."
+      >
         <Image
           source={resolvedPhoto}
-          key={typeof resolvedPhoto === "object" && resolvedPhoto.uri ? resolvedPhoto.uri : "avatar-fallback"}
+          key={
+            typeof resolvedPhoto === "object" && resolvedPhoto.uri
+              ? resolvedPhoto.uri
+              : "avatar-fallback"
+          }
           onError={() => {
             // Only mark error for remote URIs, not local fallbacks like SVG
             if (typeof resolvedPhoto === "object" && resolvedPhoto.uri) {
@@ -413,6 +427,8 @@ const handleLogout = async () => {
           }}
           style={{ width: 45, height: 45, borderRadius: 30, backgroundColor: "#E6E6E6" }}
           resizeMode="cover"
+          accessible={false}
+          importantForAccessibility="no"
         />
       </TouchableOpacity>
 
@@ -430,11 +446,23 @@ const handleLogout = async () => {
               elevation: 4, borderWidth: 1, borderColor: "#eee",
             }}
           >
-            <TouchableOpacity onPress={handleAccountSettings} style={{ paddingVertical: 12, paddingHorizontal: 14 }}>
+            <TouchableOpacity
+              onPress={handleAccountSettings}
+              accessibilityRole="button"
+              accessibilityLabel="Open account settings"
+              accessibilityHint="Opens a modal where you can edit your profile details."
+              style={{ paddingVertical: 12, paddingHorizontal: 14 }}
+            >
               <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}>Account Settings</Text>
             </TouchableOpacity>
             <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
-            <TouchableOpacity onPress={handleLogout} style={{ paddingVertical: 12, paddingHorizontal: 14 }}>
+            <TouchableOpacity
+              onPress={handleLogout}
+              accessibilityRole="button"
+              accessibilityLabel="Log out"
+              accessibilityHint="Logs you out of your account and returns to the welcome screen."
+              style={{ paddingVertical: 12, paddingHorizontal: 14 }}
+            >
               <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#B00020" }}>Log out</Text>
             </TouchableOpacity>
           </View>
@@ -479,6 +507,8 @@ const handleLogout = async () => {
           >
             {/* Header */}
             <Text
+              accessibilityRole="header"
+              accessibilityLabel="Account settings. Update your profile details."
               style={{
                 fontFamily: "Joan",
                 fontSize: 20,
@@ -500,6 +530,13 @@ const handleLogout = async () => {
               <TouchableOpacity
                 onPress={handlePickAvatar}
                 disabled={avatarUploading}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  avatarUploading
+                    ? "Updating profile photo"
+                    : "Change profile photo"
+                }
+                accessibilityHint="Opens your photo library so you can update your profile picture."
                 style={{ marginBottom: 4 }}
               >
                 <Image
@@ -525,6 +562,8 @@ const handleLogout = async () => {
                     opacity: avatarUploading ? 0.7 : 1,
                   }}
                   resizeMode="cover"
+                  accessible={false}
+                  importantForAccessibility="no"
                 />
                 {avatarUploading && (
                   <View
@@ -545,6 +584,11 @@ const handleLogout = async () => {
               <TouchableOpacity
                 onPress={handlePickAvatar}
                 disabled={avatarUploading}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  avatarUploading ? "Updating photo" : "Change profile photo"
+                }
+                accessibilityHint="Opens your photo library so you can update your profile picture."
               >
                 <Text
                   style={{
@@ -590,6 +634,8 @@ const handleLogout = async () => {
                   onChangeText={setEditEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  accessibilityLabel="Email"
+                  accessibilityHint="Edit the email associated with your account."
                   style={{
                     borderWidth: 1,
                     borderColor: "#ddd",
@@ -618,6 +664,8 @@ const handleLogout = async () => {
                 <TextInput
                   value={editFirstName}
                   onChangeText={setEditFirstName}
+                  accessibilityLabel="First name"
+                  accessibilityHint="Edit your first name."
                   style={{
                     borderWidth: 1,
                     borderColor: "#ddd",
@@ -646,6 +694,8 @@ const handleLogout = async () => {
                 <TextInput
                   value={editLastName}
                   onChangeText={setEditLastName}
+                  accessibilityLabel="Last name"
+                  accessibilityHint="Edit your last name."
                   style={{
                     borderWidth: 1,
                     borderColor: "#ddd",
@@ -688,6 +738,9 @@ const handleLogout = async () => {
                     setConfirmPassword("");
                     setPasswordOpen(true);
                   }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Change password"
+                  accessibilityHint="Opens a secure form where you can change your password."
                   style={{
                     paddingVertical: 6,
                     paddingHorizontal: 14,
@@ -727,6 +780,9 @@ const handleLogout = async () => {
                   setConfirmPassword("");
                 }}
                 disabled={savingAccount}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel changes"
+                accessibilityHint="Closes account settings without saving your edits."
                 style={{
                   paddingVertical: 10,
                   paddingHorizontal: 20,
@@ -749,6 +805,11 @@ const handleLogout = async () => {
               <TouchableOpacity
                 onPress={handleSaveAccount}
                 disabled={savingAccount}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  savingAccount ? "Saving your account changes" : "Save account changes"
+                }
+                accessibilityHint="Saves your updated profile details."
                 style={{
                   paddingVertical: 10,
                   paddingHorizontal: 20,
@@ -816,6 +877,8 @@ const handleLogout = async () => {
             }}
           >
             <Text
+              accessibilityRole="header"
+              accessibilityLabel="Change password. Enter your current and new password."
               style={{
                 fontFamily: "Joan",
                 fontSize: 20,
@@ -844,6 +907,8 @@ const handleLogout = async () => {
                   onChangeText={setCurrentPassword}
                   secureTextEntry
                   autoCapitalize="none"
+                  accessibilityLabel="Current password"
+                  accessibilityHint="Enter your current password to verify your identity."
                   style={{
                     borderWidth: 1,
                     borderColor: "#ddd",
@@ -874,6 +939,8 @@ const handleLogout = async () => {
                   onChangeText={setEditPassword}
                   secureTextEntry
                   autoCapitalize="none"
+                  accessibilityLabel="New password"
+                  accessibilityHint="Enter a new password that is at least 8 characters long."
                   style={{
                     borderWidth: 1,
                     borderColor: "#ddd",
@@ -916,6 +983,8 @@ const handleLogout = async () => {
                   onChangeText={setConfirmPassword}
                   secureTextEntry
                   autoCapitalize="none"
+                  accessibilityLabel="Confirm new password"
+                  accessibilityHint="Re-enter your new password to confirm it."
                   style={{
                     borderWidth: 1,
                     borderColor: "#ddd",
@@ -953,6 +1022,9 @@ const handleLogout = async () => {
                   "To reset your password, please use the \"Forgot password\" option on the login screen."
                 );
               }}
+              accessibilityRole="button"
+              accessibilityLabel="Forgot password"
+              accessibilityHint="Shows instructions for resetting your password from the login screen."
               style={{ marginTop: 12 }}
             >
               <Text
@@ -986,6 +1058,9 @@ const handleLogout = async () => {
                   setConfirmPassword("");
                 }}
                 disabled={savingPassword}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel password change"
+                accessibilityHint="Closes the password change form without saving."
                 style={{
                   paddingVertical: 10,
                   paddingHorizontal: 20,
@@ -1008,6 +1083,11 @@ const handleLogout = async () => {
               <TouchableOpacity
                 onPress={handleSavePassword}
                 disabled={savingPassword}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  savingPassword ? "Saving your new password" : "Save new password"
+                }
+                accessibilityHint="Saves your new password if all fields are valid."
                 style={{
                   paddingVertical: 10,
                   paddingHorizontal: 20,

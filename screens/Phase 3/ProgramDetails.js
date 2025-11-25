@@ -53,7 +53,7 @@ export default function ProgramDetails({ navigation, route }) {
   const bodySize = isNarrow || isShort ? 15 / fontScale : 16 / fontScale;
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
 
-const { enrollInProgram } = useUser();
+  const { enrollInProgram } = useUser();
 
   // Params from navigation
   const { programName, program, noProgram, message } =
@@ -188,15 +188,15 @@ const { enrollInProgram } = useUser();
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        "Expires": "0",
+        Pragma: "no-cache",
+        Expires: "0",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
     if (!res.ok) return null;
     const data = await res.json().catch(() => null);
     if (!data) return null;
-    return Array.isArray(data) ? (data[0] || null) : data;
+    return Array.isArray(data) ? data[0] || null : data;
   }, []);
 
   // Helper: persist active program id to SecureStore
@@ -211,7 +211,8 @@ const { enrollInProgram } = useUser();
           const token =
             (await SecureStore.getItemAsync("authToken")) ||
             (await SecureStore.getItemAsync("token")) ||
-            (await SecureStore.getItemAsync("accessToken")) || null;
+            (await SecureStore.getItemAsync("accessToken")) ||
+            null;
           if (!storedUserId || !token) {
             if (isMounted) setActiveProgram(null);
             return;
@@ -264,11 +265,19 @@ const { enrollInProgram } = useUser();
       let authToken = null;
       for (const k of tokenKeys) {
         const v = await SecureStore.getItemAsync(k);
-        if (v) { authToken = v; break; }
+        if (v) {
+          authToken = v;
+          break;
+        }
       }
       if (!authToken) {
-        Alert.alert("Not signed in", "Your session token is missing. Please log in again.");
-        try { navigation.navigate("Login"); } catch {}
+        Alert.alert(
+          "Not signed in",
+          "Your session token is missing. Please log in again."
+        );
+        try {
+          navigation.navigate("Login");
+        } catch {}
         return;
       }
 
@@ -301,8 +310,14 @@ const { enrollInProgram } = useUser();
           await persistActiveProgramId(verified);
         }
         Alert.alert("Subscribed", "Your training program has been selected.");
-        console.log("[ProgramDetails] verified active program", verified || data);
-        navigation.replace("Home", { refreshed: true, subscription: verified || data });
+        console.log(
+          "[ProgramDetails] verified active program",
+          verified || data
+        );
+        navigation.replace("Home", {
+          refreshed: true,
+          subscription: verified || data,
+        });
         return;
       }
 
@@ -334,9 +349,18 @@ const { enrollInProgram } = useUser();
                   // Fallback: still cache the currently viewed program locally
                   await enrollInProgram({ userId: uid, program });
                 }
-                Alert.alert("Re-subscribed", "Your program has been refreshed.");
-                console.log("[ProgramDetails] verified active program", verified || data);
-                navigation.replace("Home", { refreshed: true, subscription: verified || data });
+                Alert.alert(
+                  "Re-subscribed",
+                  "Your program has been refreshed."
+                );
+                console.log(
+                  "[ProgramDetails] verified active program",
+                  verified || data
+                );
+                navigation.replace("Home", {
+                  refreshed: true,
+                  subscription: verified || data,
+                });
               },
             },
           ]
@@ -384,9 +408,18 @@ const { enrollInProgram } = useUser();
                 // Fallback: still cache the currently viewed program locally
                 await enrollInProgram({ userId: uid, program });
               }
-              Alert.alert("Switched", `You are now enrolled in "${targetName}".`);
-              console.log("[ProgramDetails] verified active program", verified || data);
-              navigation.replace("Home", { refreshed: true, subscription: verified || data });
+              Alert.alert(
+                "Switched",
+                `You are now enrolled in "${targetName}".`
+              );
+              console.log(
+                "[ProgramDetails] verified active program",
+                verified || data
+              );
+              navigation.replace("Home", {
+                refreshed: true,
+                subscription: verified || data,
+              });
             },
           },
         ]
@@ -396,10 +429,20 @@ const { enrollInProgram } = useUser();
     } finally {
       setSubmitting(false);
     }
-  }, [navigation, program, programName, route, fetchActiveProgram, persistActiveProgramId]);
+  }, [
+    navigation,
+    program,
+    programName,
+    route,
+    fetchActiveProgram,
+    persistActiveProgramId,
+  ]);
 
   return (
-    <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
+    <SafeAreaView
+      style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}
+      {...panResponder.panHandlers}
+    >
       <KeyboardAvoidingView
         style={tw`flex-1`}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -409,10 +452,7 @@ const { enrollInProgram } = useUser();
           keyboardShouldPersistTaps="handled"
         >
           {/* outer centered container with max width */}
-          <View
-            {...panResponder.panHandlers}
-            style={[tw`flex-1 items-center`, { paddingHorizontal: 16 }]}
-          >
+          <View style={[tw`flex-1 items-center`, { paddingHorizontal: 16 }]}>
             <View
               style={{
                 width: maxWidth,
@@ -430,7 +470,6 @@ const { enrollInProgram } = useUser();
                 {title}
               </Text>
             </View>
-
 
             {/* Not enrolled / error message */}
             {noProgram ? (
@@ -517,64 +556,82 @@ const { enrollInProgram } = useUser();
                     </View>
 
                     <View style={{ paddingVertical: 8 }}>
-                      {wk.days.map((day) => (
-                        <View
-                          key={`w${wk.week}-d${day.dayIndex}`}
-                          style={{ paddingVertical: 10, paddingHorizontal: 16 }}
-                        >
-                          <Text
+                      {wk.days.map((day) => {
+                        const workoutNames =
+                          Array.isArray(day.workouts) && day.workouts.length > 0
+                            ? day.workouts
+                                .map((w) => w && w.name)
+                                .filter(Boolean)
+                                .join(", ")
+                            : "";
+                        const dayAccessibilityLabel = workoutNames
+                          ? `${day.title}. Workouts: ${workoutNames}.`
+                          : day.title;
+
+                        return (
+                          <View
+                            key={`w${wk.week}-d${day.dayIndex}`}
+                            accessible={true}
+                            accessibilityLabel={dayAccessibilityLabel}
                             style={{
-                              color: "#0E0E0E",
-                              fontFamily: "Joan",
-                              fontSize: 18,
-                              textAlign: "center",
+                              paddingVertical: 10,
+                              paddingHorizontal: 16,
                             }}
                           >
-                            {day.title}
-                          </Text>
-                          {Array.isArray(day.workouts) &&
-                          day.workouts.length > 0 ? (
-                            <View style={{ marginTop: 6 }}>
-                              {day.workouts.map((w, wi) => (
-                                <View
-                                  key={`w${wk.week}-d${day.dayIndex}-workout-${wi}`}
-                                  style={{ marginTop: wi === 0 ? 0 : 6 }}
-                                >
-                                  <Text
-                                    style={{
-                                      color: "#333",
-                                      fontFamily: "Joan",
-                                      fontSize: 16,
-                                      textAlign: "center",
-                                    }}
+                            <Text
+                              style={{
+                                color: "#0E0E0E",
+                                fontFamily: "Joan",
+                                fontSize: 18,
+                                textAlign: "center",
+                              }}
+                            >
+                              {day.title}
+                            </Text>
+                            {Array.isArray(day.workouts) &&
+                            day.workouts.length > 0 ? (
+                              <View style={{ marginTop: 6 }}>
+                                {day.workouts.map((w, wi) => (
+                                  <View
+                                    key={`w${wk.week}-d${day.dayIndex}-workout-${wi}`}
+                                    style={{ marginTop: wi === 0 ? 0 : 6 }}
                                   >
-                                    {w.name}
-                                  </Text>
-                                  {Array.isArray(w.exercises) &&
-                                  w.exercises.length > 0 ? (
-                                    <View style={{ marginTop: 4 }}>
-                                      {w.exercises.map((label, ei) => (
-                                        <Text
-                                          key={`w${wk.week}-d${day.dayIndex}-ex-${ei}`}
-                                          style={{
-                                            color: "#444",
-                                            fontFamily: "Manrope",
-                                            fontSize: 14,
-                                            textAlign: "center",
-                                            marginTop: 2,
-                                          }}
-                                        >
-                                          {label}
-                                        </Text>
-                                      ))}
-                                    </View>
-                                  ) : null}
-                                </View>
-                              ))}
-                            </View>
-                          ) : null}
-                        </View>
-                      ))}
+                                    <Text
+                                      style={{
+                                        color: "#333",
+                                        fontFamily: "Joan",
+                                        fontSize: 16,
+                                        textAlign: "center",
+                                      }}
+                                    >
+                                      {w.name}
+                                    </Text>
+                                    {Array.isArray(w.exercises) &&
+                                    w.exercises.length > 0 ? (
+                                      <View style={{ marginTop: 4 }}>
+                                        {w.exercises.map((label, ei) => (
+                                          <Text
+                                            key={`w${wk.week}-d${day.dayIndex}-ex-${ei}`}
+                                            style={{
+                                              color: "#444",
+                                              fontFamily: "Manrope",
+                                              fontSize: 14,
+                                              textAlign: "center",
+                                              marginTop: 2,
+                                            }}
+                                          >
+                                            {label}
+                                          </Text>
+                                        ))}
+                                      </View>
+                                    ) : null}
+                                  </View>
+                                ))}
+                              </View>
+                            ) : null}
+                          </View>
+                        );
+                      })}
                     </View>
                   </View>
                 ))}

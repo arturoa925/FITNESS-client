@@ -28,8 +28,22 @@ import { resolveApiBase } from "../../utils/api";
 // Reusable exercise card
 
 function ExerciseCard({ exercise, maxWidth }) {
+  const accessibleLabel = (() => {
+    if (!exercise) return "Exercise details";
+    const title = exercise.name || "Exercise";
+    const hasReps = Array.isArray(exercise.reps) && exercise.reps.length > 0;
+    if (!hasReps) return title;
+    const repsSummary = exercise.reps.join(". ");
+    return `${title}. ${repsSummary}`;
+  })();
+
   return (
-    <View style={{ width: maxWidth, alignSelf: "center", paddingVertical: 16 }}>
+    <View
+      accessible={true}
+      accessibilityRole="summary"
+      accessibilityLabel={accessibleLabel}
+      style={{ width: maxWidth, alignSelf: "center", paddingVertical: 16 }}
+    >
       {/* Image placeholder or real image */}
       {exercise.imageUri ? (
         <Image
@@ -403,7 +417,11 @@ export default function TodaysSession({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}>
+    <SafeAreaView
+      style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}
+      accessible={false}
+      accessibilityLabel="Today's training session screen showing your current workout and completion button."
+    >
       <KeyboardAvoidingView
         style={tw`flex-1`}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -427,6 +445,8 @@ export default function TodaysSession({ navigation, route }) {
               {/* Title */}
               {dayTitle ? (
                 <Text
+                  accessibilityRole="header"
+                  accessibilityLabel={`${dayTitle}. Today's training session.`}
                   style={[
                     tw`mb-6 text-center`,
                     { color: "#0E0E0E", fontFamily: "Joan", fontSize: 32 },
@@ -438,6 +458,7 @@ export default function TodaysSession({ navigation, route }) {
               {/* Subheader: Week/Day */}
               {(weekNumber && dayNumber) ? (
                 <Text
+                  accessibilityLabel={`Week ${weekNumber}, Day ${dayNumber}`}
                   style={[
                     tw`mb-4 text-center`,
                     { color: "#87DAF0", fontFamily: "Joan", fontSize: 28 },
@@ -458,6 +479,15 @@ export default function TodaysSession({ navigation, route }) {
             <TouchableOpacity
               onPress={completeCurrentWorkout}
               disabled={isCompleting}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isCompleting
+                  ? "Saving your workout as complete"
+                  : dayNumber
+                  ? `Mark day ${dayNumber} as complete`
+                  : "Mark this workout as complete"
+              }
+              accessibilityHint="Marks today's session as completed and saves your progress."
               style={{
                 backgroundColor: "#E6B82C",
                 paddingVertical: 10,

@@ -1,5 +1,3 @@
-
-
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { PanResponder, ActivityIndicator } from "react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -69,9 +67,7 @@ const deriveWeekRows = (programLike, fallbackDuration) => {
   if (Array.isArray(programLike.weeks)) {
     return programLike.weeks.map((w, idx) => {
       const days = Array.isArray(w?.days) ? w.days : [];
-      const cd =
-        Number(w?.completedDays) ||
-        days.filter(isDayCompleted).length;
+      const cd = Number(w?.completedDays) || days.filter(isDayCompleted).length;
       const td = Number(w?.totalDays) || days.length || Number(w?.total) || 0;
       const dayRows = days.map((d, di) => ({
         title: d?.title || `Day ${di + 1}`,
@@ -137,7 +133,7 @@ export default function Sessions({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [noProgram, setNoProgram] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  
+
   const [weeksData, setWeeksData] = useState([]);
   const [program, setProgram] = useState(null);
 
@@ -229,8 +225,8 @@ export default function Sessions({ navigation, route }) {
         headers: {
           "Content-Type": "application/json",
           "Cache-Control": "no-cache",
-          "Pragma": "no-cache",
-          "Expires": "0",
+          Pragma: "no-cache",
+          Expires: "0",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
@@ -302,7 +298,10 @@ export default function Sessions({ navigation, route }) {
         const w = weeksData[wi];
         const days = Array.isArray(w?.days)
           ? w.days
-          : Array.from({ length: w.totalDays }, (_, i) => ({ title: `Day ${i + 1}`, completed: i < (w.completedDays || 0) }));
+          : Array.from({ length: w.totalDays }, (_, i) => ({
+              title: `Day ${i + 1}`,
+              completed: i < (w.completedDays || 0),
+            }));
 
         let foundDayIndex = days.findIndex((d) => !d?.completed);
         if (foundDayIndex === -1) foundDayIndex = 0; // if all done, start at first day
@@ -431,6 +430,11 @@ export default function Sessions({ navigation, route }) {
       <>
         <Pressable
           onPress={() => setExpanded((prev) => !prev)}
+          accessibilityRole="button"
+          accessibilityLabel={`Week ${item.week}. ${
+            item.completedDays || 0
+          } of ${item.totalDays || 0} days completed.`}
+          accessibilityHint="Double tap to expand and view the training days in this week."
           style={[
             tw`flex-row items-center justify-between mb-12`,
             { width: "100%", paddingHorizontal: 4 },
@@ -569,9 +573,16 @@ export default function Sessions({ navigation, route }) {
                 typeof d?.completed === "boolean"
                   ? d.completed
                   : i < item.completedDays;
+
+              const labelTitle = d?.title || `Day ${i + 1}`;
+              const statusText = isDone ? "completed" : "not completed";
+
               return (
                 <Animated.View
                   key={i}
+                  accessible={true}
+                  accessibilityRole="text"
+                  accessibilityLabel={`${labelTitle}, ${statusText}`}
                   style={[
                     tw`flex-row items-center justify-start py-1`,
                     { opacity: a, transform: [{ translateY }] },
@@ -601,7 +612,7 @@ export default function Sessions({ navigation, route }) {
                       },
                     ]}
                   >
-                    {d?.title || `Day ${i + 1}`}
+                    {labelTitle}
                   </Text>
                 </Animated.View>
               );
@@ -652,6 +663,9 @@ export default function Sessions({ navigation, route }) {
         )}
         <TouchableOpacity
           onPress={() => navigation.navigate("Home")}
+          accessibilityRole="button"
+          accessibilityLabel="Go home to enroll in a training program"
+          accessibilityHint="Opens the home screen so you can pick a training program."
           style={{
             backgroundColor: "#E6B82C",
             paddingVertical: 10,
@@ -673,7 +687,6 @@ export default function Sessions({ navigation, route }) {
       </SafeAreaView>
     );
   }
-
 
   return (
     <SafeAreaView
@@ -699,6 +712,8 @@ export default function Sessions({ navigation, route }) {
             >
               {/* Title */}
               <Text
+                accessibilityRole="header"
+                accessibilityLabel="Train. View your weeks and training sessions."
                 style={[
                   tw`mb-6 text-center text-5xl`,
                   { color: "#87DAF0", fontFamily: "Joan" },
@@ -720,6 +735,9 @@ export default function Sessions({ navigation, route }) {
 
               <TouchableOpacity
                 onPress={handleBeginToday}
+                accessibilityRole="button"
+                accessibilityLabel="Begin today's training session"
+                accessibilityHint="Opens the next training day in your current program."
                 style={{
                   backgroundColor: "#E6B82C",
                   paddingVertical: 10,
