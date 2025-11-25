@@ -177,7 +177,7 @@ export default function Home({ navigation, route }) {
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
 
   // * user context
-  const { user } = useUser();
+  const { user, pendingOps, syncPendingOps } = useUser();
 
   // * log out user
   const handleLogout = async () => {
@@ -357,6 +357,26 @@ export default function Home({ navigation, route }) {
           }
           const baseURL = resolveApiBase();
           const token = await SecureStore.getItemAsync("authToken");
+
+          // Before fetching fresh user/program data, try to sync any
+          // offline-completed workouts queued in pendingOps.
+          if (
+            typeof syncPendingOps === "function" &&
+            pendingOps &&
+            pendingOps.length > 0 &&
+            token
+          ) {
+            try {
+              await syncPendingOps({
+                userId: storedId,
+                authToken: token,
+                baseUrl: baseURL,
+              });
+            } catch (syncErr) {
+              console.error("[Home] syncPendingOps error:", syncErr);
+            }
+          }
+
           const res = await fetch(`${baseURL}/users/${storedId}`, {
             headers: {
               "Content-Type": "application/json",
