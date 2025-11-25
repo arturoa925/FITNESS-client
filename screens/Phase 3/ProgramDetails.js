@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { useUser } from "../../components/UserContext";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   View,
@@ -51,6 +52,8 @@ export default function ProgramDetails({ navigation, route }) {
   const h2Size = isNarrow || isShort ? 18 / fontScale : 20 / fontScale;
   const bodySize = isNarrow || isShort ? 15 / fontScale : 16 / fontScale;
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
+
+const { enrollInProgram } = useUser();
 
   // Params from navigation
   const { programName, program, noProgram, message } =
@@ -294,6 +297,7 @@ export default function ProgramDetails({ navigation, route }) {
         // Verify server state by refetching the active program
         const verified = await fetchActiveProgram(uid, authToken);
         if (verified) {
+          await enrollInProgram({ userId: uid, program: verified });
           await persistActiveProgramId(verified);
         }
         Alert.alert("Subscribed", "Your training program has been selected.");
@@ -324,7 +328,11 @@ export default function ProgramDetails({ navigation, route }) {
                 const data = await res.json().catch(() => null);
                 const verified = await fetchActiveProgram(uid, authToken);
                 if (verified) {
+                  await enrollInProgram({ userId: uid, program: verified });
                   await persistActiveProgramId(verified);
+                } else if (program) {
+                  // Fallback: still cache the currently viewed program locally
+                  await enrollInProgram({ userId: uid, program });
                 }
                 Alert.alert("Re-subscribed", "Your program has been refreshed.");
                 console.log("[ProgramDetails] verified active program", verified || data);
@@ -346,8 +354,6 @@ export default function ProgramDetails({ navigation, route }) {
             text: "Switch",
             style: "destructive",
             onPress: async () => {
-              // Optional: mark the current program as complete via the user's route hint
-              // Note: if your backend expects a different payload for completion, adjust here.
               try {
                 const completeUrl = `${base}/users/${uid}/program/complete`;
                 await fetch(completeUrl, {
@@ -360,7 +366,6 @@ export default function ProgramDetails({ navigation, route }) {
                 }).catch(() => {});
               } catch {}
 
-              // Choose the new program
               const res = await fetch(chooseUrl, {
                 method: "POST",
                 headers: {
@@ -373,7 +378,11 @@ export default function ProgramDetails({ navigation, route }) {
               const data = await res.json().catch(() => null);
               const verified = await fetchActiveProgram(uid, authToken);
               if (verified) {
+                await enrollInProgram({ userId: uid, program: verified });
                 await persistActiveProgramId(verified);
+              } else if (program) {
+                // Fallback: still cache the currently viewed program locally
+                await enrollInProgram({ userId: uid, program });
               }
               Alert.alert("Switched", `You are now enrolled in "${targetName}".`);
               console.log("[ProgramDetails] verified active program", verified || data);
