@@ -12,8 +12,10 @@ import {
 } from "react-native";
 import { Calendar } from "react-native-calendars";
 import { Picker } from "@react-native-picker/picker";
+import { useUser } from "../../components/UserContext";
+import { resolveApiBase } from "../../utils/api";
 
-const API_BASE_URL = "http://localhost:3004";
+const API_BASE_URL = resolveApiBase();
 
 export default function CalendarFoodLog({
   maxWidth,
@@ -29,8 +31,8 @@ export default function CalendarFoodLog({
   const [foodAmount, setFoodAmount] = useState("");
   const [foodUnit, setFoodUnit] = useState("g");
 
-  // Foods keyed by date
-  const [foodsByDate, setFoodsByDate] = useState({});
+  // Foods keyed by date (from context)
+  const { foodsByDate, setFoodsByDate, addFoodEntry, removeFoodEntry } = useUser();
 
   // Completed workouts keyed by date fetched from the backend calendar route
   const [serverCompletedWorkouts, setServerCompletedWorkouts] = useState({});
@@ -167,7 +169,7 @@ export default function CalendarFoodLog({
         console.error("Error fetching foods for date:", dateStr, err);
       }
     },
-    [userId, authToken]
+    [userId, authToken, setFoodsByDate]
   );
 
   const openFoodModal = (dateStr) => {
@@ -182,8 +184,8 @@ export default function CalendarFoodLog({
       return;
     }
 
-    if (!userId || !authToken) {
-      Alert.alert("Unable to save food", "Missing user credentials.");
+    if (!userId) {
+      Alert.alert("Unable to save food", "Missing user id.");
       return;
     }
 
@@ -197,31 +199,13 @@ export default function CalendarFoodLog({
     };
 
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/users/${userId}/calendar/foods`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      if (!res.ok) {
-        console.error("Failed to add food, status:", res.status);
-        Alert.alert("Unable to save food", "Please try again.");
-        return;
-      }
-
-      const updatedCalendar = await res.json();
-
-      // Sync this date's foods from the server response
-      setFoodsByDate((prev) => ({
-        ...prev,
-        [selectedDate]: updatedCalendar.foods || [],
-      }));
+      await addFoodEntry({
+        userId,
+        date: selectedDate,
+        food: payload.food,
+        authToken,
+        baseUrl: API_BASE_URL,
+      });
 
       setFoodName("");
       setFoodAmount("");
@@ -231,15 +215,15 @@ export default function CalendarFoodLog({
       console.error("Error adding food to calendar:", err);
       Alert.alert(
         "Unable to save food",
-        "Please check your connection and try again."
+        "Something went wrong locally."
       );
     }
   };
 
   // Delete food helper
   const deleteFood = async (dateStr, food) => {
-    if (!userId || !authToken) {
-      Alert.alert("Unable to remove food", "Missing user credentials.");
+    if (!userId) {
+      Alert.alert("Unable to remove food", "Missing user id.");
       return;
     }
 
@@ -261,45 +245,18 @@ export default function CalendarFoodLog({
           style: "destructive",
           onPress: async () => {
             try {
-              const res = await fetch(
-                `${API_BASE_URL}/users/${userId}/calendar/foods`,
-                {
-                  method: "DELETE",
-                  headers: {
-                    Authorization: `Bearer ${authToken}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    date: dateStr,
-                    foodId: food.id,
-                  }),
-                }
-              );
-
-              if (!res.ok) {
-                console.error(
-                  "Failed to delete food, status:",
-                  res.status
-                );
-                Alert.alert(
-                  "Unable to remove food",
-                  "Please try again."
-                );
-                return;
-              }
-
-              const updatedCalendar = await res.json();
-
-              // Sync this date's foods from the server response
-              setFoodsByDate((prev) => ({
-                ...prev,
-                [dateStr]: updatedCalendar.foods || [],
-              }));
+              await removeFoodEntry({
+                userId,
+                date: dateStr,
+                foodId: food.id,
+                authToken,
+                baseUrl: API_BASE_URL,
+              });
             } catch (err) {
               console.error("Error deleting food:", err);
               Alert.alert(
                 "Unable to remove food",
-                "Please check your connection and try again."
+                "Something went wrong locally."
               );
             }
           },

@@ -19,6 +19,7 @@ export const UserProvider = ({ children }) => {
   const [programsCache, setProgramsCache] = useState({});
   const [progress, setProgress] = useState({});
   const [pendingOps, setPendingOps] = useState([]);
+  const [foodsByDate, setFoodsByDate] = useState({});
 
   // Hydrate from AsyncStorage on mount
   useEffect(() => {
@@ -29,11 +30,13 @@ export const UserProvider = ({ children }) => {
           storedProgramsCache,
           storedProgress,
           storedPending,
+          storedFoodsByDate,
         ] = await Promise.all([
           AsyncStorage.getItem("currentProgramId"),
           AsyncStorage.getItem("programsCache"),
           AsyncStorage.getItem("progress"),
           AsyncStorage.getItem("pendingOps"),
+          AsyncStorage.getItem("foodsByDate"),
         ]);
 
         if (storedProgramsCache) {
@@ -51,6 +54,9 @@ export const UserProvider = ({ children }) => {
 
         if (storedPending) {
           setPendingOps(JSON.parse(storedPending));
+        }
+        if (storedFoodsByDate) {
+          setFoodsByDate(JSON.parse(storedFoodsByDate));
         }
       } catch (e) {
         console.error("[UserProvider] hydrate failed:", e);
@@ -114,6 +120,197 @@ export const UserProvider = ({ children }) => {
       });
     },
     []
+  );
+
+  // ----- Foods: local cache + offline queue helpers -----
+
+  const addFoodLocal = useCallback(
+    async ({ date, food }) => {
+      if (!date || !food) return;
+      setFoodsByDate((prev) => {
+        const existing = prev[date] || [];
+        const updated = {
+          ...prev,
+          [date]: [...existing, food],
+        };
+        AsyncStorage.setItem("foodsByDate", JSON.stringify(updated));
+        return updated;
+      });
+    },
+    []
+  );
+
+  const removeFoodLocal = useCallback(
+    async ({ date, foodId }) => {
+      if (!date || !foodId) return;
+      setFoodsByDate((prev) => {
+        const existing = prev[date] || [];
+        const filtered = existing.filter(
+          (item) => String(item.id) !== String(foodId)
+        );
+        const updated = {
+          ...prev,
+          [date]: filtered,
+        };
+        AsyncStorage.setItem("foodsByDate", JSON.stringify(updated));
+        return updated;
+      });
+    },
+    []
+  );
+
+  // Add a food entry with offline support
+  const addFoodEntry = useCallback(
+    async ({ userId, date, food, authToken, baseUrl }) => {
+      if (!date || !food) return;
+
+      const withId = {
+        id:
+          food.id ||
+          `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        ...food,
+      };
+
+      // Always update local cache so UI reflects immediately
+      await addFoodLocal({ date, food: withId });
+
+      // If we don't have server info, just queue and return
+      if (!userId || !authToken || !baseUrl) {
+        const op = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          type: "FOOD_ADD",
+          date,
+          food: withId,
+        };
+        setPendingOps((prev) => {
+          const next = [...prev, op];
+          AsyncStorage.setItem("pendingOps", JSON.stringify(next));
+          return next;
+        });
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `${baseUrl}/users/${userId}/calendar/foods`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ date, food: withId }),
+          }
+        );
+
+        if (!res.ok) {
+          console.error(
+            "[UserProvider] addFoodEntry failed, status:",
+            res.status
+          );
+          const op = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            type: "FOOD_ADD",
+            date,
+            food: withId,
+          };
+          setPendingOps((prev) => {
+            const next = [...prev, op];
+            AsyncStorage.setItem("pendingOps", JSON.stringify(next));
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error("[UserProvider] addFoodEntry network error:", err);
+        const op = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          type: "FOOD_ADD",
+          date,
+          food: withId,
+        };
+        setPendingOps((prev) => {
+          const next = [...prev, op];
+          AsyncStorage.setItem("pendingOps", JSON.stringify(next));
+          return next;
+        });
+      }
+    },
+    [addFoodLocal]
+  );
+
+  // Remove a food entry with offline support
+  const removeFoodEntry = useCallback(
+    async ({ userId, date, foodId, authToken, baseUrl }) => {
+      if (!date || !foodId) return;
+
+      // Update local cache immediately
+      await removeFoodLocal({ date, foodId });
+
+      // If we don't have server info, queue a delete op
+      if (!userId || !authToken || !baseUrl) {
+        const op = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          type: "FOOD_DELETE",
+          date,
+          foodId,
+        };
+        setPendingOps((prev) => {
+          const next = [...prev, op];
+          AsyncStorage.setItem("pendingOps", JSON.stringify(next));
+          return next;
+        });
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `${baseUrl}/users/${userId}/calendar/foods`,
+          {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ date, foodId }),
+          }
+        );
+
+        if (!res.ok) {
+          console.error(
+            "[UserProvider] removeFoodEntry failed, status:",
+            res.status
+          );
+          const op = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            type: "FOOD_DELETE",
+            date,
+            foodId,
+          };
+          setPendingOps((prev) => {
+            const next = [...prev, op];
+            AsyncStorage.setItem("pendingOps", JSON.stringify(next));
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error(
+          "[UserProvider] removeFoodEntry network error:",
+          err
+        );
+        const op = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          type: "FOOD_DELETE",
+          date,
+          foodId,
+        };
+        setPendingOps((prev) => {
+          const next = [...prev, op];
+          AsyncStorage.setItem("pendingOps", JSON.stringify(next));
+          return next;
+        });
+      }
+    },
+    [removeFoodLocal]
   );
 
   const completeWorkout = useCallback(
@@ -227,67 +424,135 @@ export const UserProvider = ({ children }) => {
       const stillPending = [];
 
       for (const op of currentQueue) {
-        if (op.type !== "COMPLETE_WORKOUT") {
-          // If you add more types later, handle them here.
-          stillPending.push(op);
+        if (op.type === "COMPLETE_WORKOUT") {
+          try {
+            const res = await fetch(
+              `${baseUrl}/users/${userId}/workouts/complete`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${authToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  programId: op.programId,
+                  workoutKey: op.workoutKey,
+                  completedAt: op.completedAt,
+                }),
+              }
+            );
+
+            if (!res.ok) {
+              console.error(
+                "[UserProvider] syncPendingOps failed, status:",
+                res.status
+              );
+              stillPending.push(op);
+              continue;
+            }
+
+            // Mark as synced in local progress
+            setProgress((prev) => {
+              const programProgress = prev[op.programId];
+              if (
+                !programProgress?.completedWorkouts ||
+                !programProgress.completedWorkouts[op.workoutKey]
+              ) {
+                return prev;
+              }
+              const updated = {
+                ...prev,
+                [op.programId]: {
+                  ...programProgress,
+                  completedWorkouts: {
+                    ...programProgress.completedWorkouts,
+                    [op.workoutKey]: {
+                      ...programProgress.completedWorkouts[op.workoutKey],
+                      synced: true,
+                    },
+                  },
+                },
+              };
+              AsyncStorage.setItem("progress", JSON.stringify(updated));
+              return updated;
+            });
+          } catch (err) {
+            console.error(
+              "[UserProvider] syncPendingOps network error:",
+              err
+            );
+            stillPending.push(op);
+          }
           continue;
         }
 
-        try {
-          const res = await fetch(
-            `${baseUrl}/users/${userId}/workouts/complete`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${authToken}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                programId: op.programId,
-                workoutKey: op.workoutKey,
-                completedAt: op.completedAt,
-              }),
-            }
-          );
+        if (op.type === "FOOD_ADD") {
+          try {
+            const res = await fetch(
+              `${baseUrl}/users/${userId}/calendar/foods`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${authToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ date: op.date, food: op.food }),
+              }
+            );
 
-          if (!res.ok) {
+            if (!res.ok) {
+              console.error(
+                "[UserProvider] syncPendingOps FOOD_ADD failed, status:",
+                res.status
+              );
+              stillPending.push(op);
+            }
+          } catch (err) {
             console.error(
-              "[UserProvider] syncPendingOps failed, status:",
-              res.status
+              "[UserProvider] syncPendingOps FOOD_ADD network error:",
+              err
             );
             stillPending.push(op);
-            continue;
           }
-
-          // Mark as synced in local progress
-          setProgress((prev) => {
-            const programProgress = prev[op.programId];
-            if (
-              !programProgress?.completedWorkouts ||
-              !programProgress.completedWorkouts[op.workoutKey]
-            ) {
-              return prev;
-            }
-            const updated = {
-              ...prev,
-              [op.programId]: {
-                ...programProgress,
-                completedWorkouts: {
-                  ...programProgress.completedWorkouts,
-                  [op.workoutKey]: {
-                    ...programProgress.completedWorkouts[op.workoutKey],
-                    synced: true,
-                  },
-                },
-              },
-            };
-            AsyncStorage.setItem("progress", JSON.stringify(updated));
-            return updated;
-          });
-        } catch (err) {
-          console.error("[UserProvider] syncPendingOps network error:", err);
-          stillPending.push(op);
+          continue;
         }
+
+        if (op.type === "FOOD_DELETE") {
+          try {
+            const res = await fetch(
+              `${baseUrl}/users/${userId}/calendar/foods`,
+              {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Bearer ${authToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  date: op.date,
+                  foodId: op.foodId,
+                }),
+              }
+            );
+
+            if (!res.ok) {
+              console.error(
+                "[UserProvider] syncPendingOps FOOD_DELETE failed, status:",
+                res.status
+              );
+              stillPending.push(op);
+            }
+          } catch (err) {
+            console.error(
+              "[UserProvider] syncPendingOps FOOD_DELETE network error:",
+              err
+            );
+            stillPending.push(op);
+          }
+          continue;
+        }
+
+        // Unknown op types remain pending
+        stillPending.push(op);
       }
 
       setPendingOps(stillPending);
@@ -362,10 +627,15 @@ export const UserProvider = ({ children }) => {
     pendingOps,
     setPendingOps,
 
+    foodsByDate,
+    setFoodsByDate,
+
     enrollInProgram,
     markWorkoutCompleteLocal,
     completeWorkout,
     syncPendingOps,
+    addFoodEntry,
+    removeFoodEntry,
   };
 
   return (
