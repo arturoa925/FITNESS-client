@@ -58,6 +58,212 @@ export const UserProvider = ({ children }) => {
     hydrate();
   }, []);
 
+  const markWorkoutCompleteLocal = useCallback(
+    async ({ programId, workoutKey, completedAt }) => {
+      if (!programId || !workoutKey) return;
+
+      setProgress((prev) => {
+        const programProgress = prev[programId] || { completedWorkouts: {} };
+        const updated = {
+          ...prev,
+          [programId]: {
+            ...programProgress,
+            completedWorkouts: {
+              ...(programProgress.completedWorkouts || {}),
+              [workoutKey]: {
+                completedAt,
+                synced: false,
+              },
+            },
+          },
+        };
+        AsyncStorage.setItem("progress", JSON.stringify(updated));
+        return updated;
+      });
+    },
+    []
+  );
+
+  const completeWorkout = useCallback(
+    async ({ userId, programId, workoutKey, authToken, baseUrl }) => {
+      if (!programId || !workoutKey) return;
+
+      const completedAt = new Date().toISOString();
+
+      // Always update local state so UI reflects completion immediately
+      await markWorkoutCompleteLocal({ programId, workoutKey, completedAt });
+
+      // If we don't have server info, just queue the op and return
+      if (!userId || !authToken || !baseUrl) {
+        const op = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          type: "COMPLETE_WORKOUT",
+          programId,
+          workoutKey,
+          completedAt,
+        };
+        setPendingOps((prev) => {
+          const next = [...prev, op];
+          AsyncStorage.setItem("pendingOps", JSON.stringify(next));
+          return next;
+        });
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `${baseUrl}/users/${userId}/workouts/complete`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ programId, workoutKey, completedAt }),
+          }
+        );
+
+        if (!res.ok) {
+          console.error(
+            "[UserProvider] completeWorkout failed, status:",
+            res.status
+          );
+          // Queue the op for later retry
+          const op = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            type: "COMPLETE_WORKOUT",
+            programId,
+            workoutKey,
+            completedAt,
+          };
+          setPendingOps((prev) => {
+            const next = [...prev, op];
+            AsyncStorage.setItem("pendingOps", JSON.stringify(next));
+            return next;
+          });
+          return;
+        }
+
+        // If server call succeeded, optionally mark as synced
+        setProgress((prev) => {
+          const programProgress = prev[programId];
+          if (!programProgress?.completedWorkouts?.[workoutKey]) {
+            return prev;
+          }
+          const updated = {
+            ...prev,
+            [programId]: {
+              ...programProgress,
+              completedWorkouts: {
+                ...programProgress.completedWorkouts,
+                [workoutKey]: {
+                  ...programProgress.completedWorkouts[workoutKey],
+                  synced: true,
+                },
+              },
+            },
+          };
+          AsyncStorage.setItem("progress", JSON.stringify(updated));
+          return updated;
+        });
+      } catch (err) {
+        console.error("[UserProvider] completeWorkout network error:", err);
+        // Queue the op if network error
+        const op = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          type: "COMPLETE_WORKOUT",
+          programId,
+          workoutKey,
+          completedAt,
+        };
+        setPendingOps((prev) => {
+          const next = [...prev, op];
+          AsyncStorage.setItem("pendingOps", JSON.stringify(next));
+          return next;
+        });
+      }
+    },
+    [markWorkoutCompleteLocal]
+  );
+
+  const syncPendingOps = useCallback(
+    async ({ userId, authToken, baseUrl }) => {
+      if (!userId || !authToken || !baseUrl) return;
+      if (!pendingOps || pendingOps.length === 0) return;
+
+      const currentQueue = [...pendingOps];
+      const stillPending = [];
+
+      for (const op of currentQueue) {
+        if (op.type !== "COMPLETE_WORKOUT") {
+          // If you add more types later, handle them here.
+          stillPending.push(op);
+          continue;
+        }
+
+        try {
+          const res = await fetch(
+            `${baseUrl}/users/${userId}/workouts/complete`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${authToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                programId: op.programId,
+                workoutKey: op.workoutKey,
+                completedAt: op.completedAt,
+              }),
+            }
+          );
+
+          if (!res.ok) {
+            console.error(
+              "[UserProvider] syncPendingOps failed, status:",
+              res.status
+            );
+            stillPending.push(op);
+            continue;
+          }
+
+          // Mark as synced in local progress
+          setProgress((prev) => {
+            const programProgress = prev[op.programId];
+            if (
+              !programProgress?.completedWorkouts ||
+              !programProgress.completedWorkouts[op.workoutKey]
+            ) {
+              return prev;
+            }
+            const updated = {
+              ...prev,
+              [op.programId]: {
+                ...programProgress,
+                completedWorkouts: {
+                  ...programProgress.completedWorkouts,
+                  [op.workoutKey]: {
+                    ...programProgress.completedWorkouts[op.workoutKey],
+                    synced: true,
+                  },
+                },
+              },
+            };
+            AsyncStorage.setItem("progress", JSON.stringify(updated));
+            return updated;
+          });
+        } catch (err) {
+          console.error("[UserProvider] syncPendingOps network error:", err);
+          stillPending.push(op);
+        }
+      }
+
+      setPendingOps(stillPending);
+      await AsyncStorage.setItem("pendingOps", JSON.stringify(stillPending));
+    },
+    [pendingOps]
+  );
+
   const enrollInProgram = useCallback(
     async ({ userId, program, authToken, baseUrl }) => {
       if (!program) return false;
@@ -125,6 +331,9 @@ export const UserProvider = ({ children }) => {
     setPendingOps,
 
     enrollInProgram,
+    markWorkoutCompleteLocal,
+    completeWorkout,
+    syncPendingOps,
   };
 
   return (

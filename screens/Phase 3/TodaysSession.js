@@ -22,6 +22,7 @@ import * as SecureStore from "expo-secure-store";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import { useUser } from "../../components/UserContext";
 
 // Reusable exercise card
 
@@ -74,6 +75,8 @@ export default function TodaysSession({ navigation, route }) {
   const h2Size = isNarrow || isShort ? 18 / fontScale : 20 / fontScale;
   const bodySize = isNarrow || isShort ? 15 / fontScale : 16 / fontScale;
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
+
+  const { completeWorkout } = useUser();
 
   // Data driven by Sessions route params
   const [exercises, setExercises] = useState([]);
@@ -365,48 +368,30 @@ export default function TodaysSession({ navigation, route }) {
         return;
       }
 
-      // Optionally compute a synthetic workoutId (w:week-day-workout)
+      // Optionally compute a synthetic workoutKey (w:week-day-workout)
       const syntheticId = `w:${wi}-${di}-${woi}`;
 
-      const url = `${API_BASE}/users/${userId}/program/complete`;
-
+      // For user feedback, compute a local-effective date string
       const todayLocal = new Date();
       const yyyy = todayLocal.getFullYear();
       const mm = String(todayLocal.getMonth() + 1).padStart(2, "0");
       const dd = String(todayLocal.getDate()).padStart(2, "0");
       const effectiveDate = `${yyyy}-${mm}-${dd}`;
 
-      const body = {
+      // Use the offline-aware queue system from UserContext
+      await completeWorkout({
+        userId,
         programId,
-        // Provide both the synthetic id and explicit indices so the server can use either
-        workoutId: syntheticId,
-        weekIndex: wi,
-        dayIndex: di,
-        workoutIndex: woi,
-        date: effectiveDate,
-      };
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(body),
+        workoutKey: syntheticId,
+        authToken: token,
+        baseUrl: API_BASE,
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || `Request failed: ${res.status}`);
-      }
-
-      const data = await res.json();
 
       // Update local in-memory program to reflect completion (so UI can advance without a refetch)
       markLocalCompleted(p.program, wi, di, woi);
 
-      // Always go to Home after completion
-      Alert.alert("Workout Complete", `Saved for ${data.date}`);
+      // Go Home after completion, regardless of online/offline
+      Alert.alert("Workout Complete", `Saved for ${effectiveDate}`);
       navigation.replace("Home");
     } catch (e) {
       console.log("[TodaysSession] completeCurrentWorkout error:", e);
