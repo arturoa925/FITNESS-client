@@ -44,6 +44,7 @@ export default function Welcome({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [biometricEmail, setBiometricEmail] = useState("");
+  const [rateLimited, setRateLimited] = useState(false);
 
   // Biometrics state
   const [biometricSupported, setBiometricSupported] = useState(false);
@@ -233,6 +234,7 @@ export default function Welcome({ navigation }) {
       });
 
       if (!response.ok) {
+        const status = response.status;
         let message = "Login failed.";
         try {
           const errBody = await response.json();
@@ -242,7 +244,18 @@ export default function Welcome({ navigation }) {
             message = await response.text();
           } catch (_) {}
         }
-        Alert.alert("Login error", message || "Please try again.");
+
+        // Special handling for rate limit (HTTP 429)
+        if (status === 429) {
+          setRateLimited(true);
+          Alert.alert(
+            "Too many attempts",
+            message ||
+              "You’ve tried to log in too many times. Please wait a few minutes and try again."
+          );
+        } else {
+          Alert.alert("Login error", message || "Please try again.");
+        }
         return;
       }
 
@@ -732,6 +745,17 @@ export default function Welcome({ navigation }) {
                   Log In
                 </Text>
               </Pressable>
+
+              {rateLimited && (
+                <Text
+                  style={[
+                    tw`mt-3 text-center`,
+                    { color: "#F97373", fontFamily: "Manrope", fontSize: bodySize },
+                  ]}
+                >
+                  Too many login attempts. Please wait a few minutes before trying again.
+                </Text>
+              )}
 
               {/* registration */}
               <View style={tw`mt-4`}>
