@@ -672,9 +672,13 @@ export default function Welcome({ navigation }) {
                   textContentType="emailAddress"
                   autoComplete="email"
                   returnKeyType="next"
+                  accessibilityLabel="Email address"
+                  accessibilityHint="Enter the email you use for your Fitness account."
+                  accessibilityState={{ invalid: !!emailError }}
                 />
                 {emailError ? (
                   <Text
+                    accessibilityLiveRegion="polite"
                     style={[
                       tw`mb-2`,
                       {
@@ -700,9 +704,13 @@ export default function Welcome({ navigation }) {
                   textContentType="password"
                   autoComplete="password"
                   returnKeyType="done"
+                  accessibilityLabel="Password"
+                  accessibilityHint="Enter your account password."
+                  accessibilityState={{ invalid: !!passwordError }}
                 />
                 {passwordError ? (
                   <Text
+                    accessibilityLiveRegion="polite"
                     style={[
                       tw`mb-2`,
                       {
@@ -722,6 +730,12 @@ export default function Welcome({ navigation }) {
                 onPress={toggleBiometrics}
                 activeOpacity={0.8}
                 accessibilityRole="checkbox"
+                accessibilityLabel={`Use ${biometricLabel} to login`}
+                accessibilityHint={
+                  biometricSupported
+                    ? `Double tap to ${useBiometrics ? "disable" : "enable"} ${biometricLabel} for faster login.`
+                    : `${biometricLabel} is not available on this device.`
+                }
                 accessibilityState={{
                   checked: useBiometrics,
                   disabled: !biometricSupported,
@@ -761,6 +775,7 @@ export default function Welcome({ navigation }) {
                   onPress={handleBiometricLogin}
                   accessibilityRole="button"
                   accessibilityLabel={`Login with ${biometricLabel}`}
+                  accessibilityHint={`Authenticate using ${biometricLabel} instead of typing your password.`}
                   disabled={authBusy}
                 >
                   <Text
@@ -791,6 +806,9 @@ export default function Welcome({ navigation }) {
                 ]}
                 onPress={handleLogin}
                 disabled={authBusy}
+                accessibilityRole="button"
+                accessibilityLabel="Log in to your Fitness account"
+                accessibilityHint="Submits your email and password to log in."
               >
                 <Text
                   style={[
@@ -804,6 +822,7 @@ export default function Welcome({ navigation }) {
 
               {rateLimited && (
                 <Text
+                  accessibilityLiveRegion="polite"
                   style={[
                     tw`mt-3 text-center`,
                     { color: "#F97373", fontFamily: "Manrope", fontSize: bodySize },
@@ -821,6 +840,9 @@ export default function Welcome({ navigation }) {
                     { backgroundColor: pressed ? "#A4DFF2" : "#EDEDED" },
                   ]}
                   onPress={handleRegisterPress}
+                  accessibilityRole="button"
+                  accessibilityLabel="Register for a new Fitness account"
+                  accessibilityHint="Opens the registration screen so you can create a new account."
                 >
                   <Text
                     style={[
@@ -858,6 +880,9 @@ export default function Welcome({ navigation }) {
                     activeOpacity={0.8}
                     name="google"
                     onPress={handleGoogleSignIn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sign in with Google"
+                    accessibilityHint="Opens Google to sign you into your Fitness account."
                   >
                     <Svg
                       width={iconSize}
@@ -874,6 +899,9 @@ export default function Welcome({ navigation }) {
                     activeOpacity={0.8}
                     name="github"
                     onPress={handleGithubSignIn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sign in with GitHub"
+                    accessibilityHint="Opens GitHub to sign you into your Fitness account."
                   >
                     <Svg
                       width={iconSize}
@@ -889,6 +917,9 @@ export default function Welcome({ navigation }) {
                     style={tw`bg-white rounded-full w-12 h-12 items-center justify-center shadow`}
                     activeOpacity={0.8}
                     name="apple"
+                    accessibilityRole="button"
+                    accessibilityLabel="Sign in with Apple"
+                    accessibilityHint="Uses your Apple ID to sign in when available."
                   >
                     <Svg
                       width={iconSize}
@@ -905,6 +936,9 @@ export default function Welcome({ navigation }) {
                     style={tw`bg-white rounded-full w-12 h-12 items-center justify-center shadow`}
                     activeOpacity={0.8}
                     name="linkedin"
+                    accessibilityRole="button"
+                    accessibilityLabel="Sign in with LinkedIn"
+                    accessibilityHint="Opens LinkedIn to sign you into your Fitness account."
                   >
                     <Svg
                       width={iconSize}
