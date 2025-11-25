@@ -21,6 +21,7 @@ import * as SecureStore from "expo-secure-store";
 import * as ImagePicker from "expo-image-picker";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { resolveApiBase } from "../../utils/api";
 import { useNavigation } from "@react-navigation/native";
 
@@ -332,61 +333,85 @@ export default function Register() {
   ).current;
 
   return (
-    <SafeAreaView
-      style={[tw`flex-1`, { backgroundColor: "#A4A4A4" }]}
+    <LinearGradient
+      colors={["#E0F2FE", "#F3F4F6"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={tw`flex-1`}
     >
-      <KeyboardAvoidingView
-        style={tw`flex-1`}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={[tw`flex-grow`, { paddingVertical: 24 }]}
+      <SafeAreaView style={tw`flex-1`}>
+        <KeyboardAvoidingView
+          style={tw`flex-1`}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <ScrollView
+          contentContainerStyle={[
+            tw`flex-grow items-center`,
+            { paddingVertical: 28, paddingHorizontal: 20 },
+          ]}
           keyboardShouldPersistTaps="handled"
           {...panResponder.panHandlers}
         >
-          {/* title with icon */}
-          <View style={[tw` items-center `, { paddingHorizontal: 16 }]}>
-            <View
-              style={{
+          <View
+            style={[
+              {
                 width: maxWidth,
-                alignSelf: "center",
-                paddingVertical: isShort ? 16 : 24,
-              }}
+                backgroundColor: "#FFFFFF",
+                borderRadius: 20,
+                paddingVertical: isShort ? 20 : 28,
+                paddingHorizontal: isShort ? 18 : 24,
+                borderWidth: 1,
+                borderColor: "#E5E7EB",
+                shadowColor: "#000",
+                shadowOpacity: 0.04,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 1,
+              },
+            ]}
+          >
+          {/* header */}
+          <View style={tw`items-center mb-4`}>
+            <Text
+              style={[
+                tw`text-center`,
+                { color: "#0F172A", fontFamily: "Joan", fontSize: h1Size },
+              ]}
             >
-              {/* Title */}
-              <Text
-                style={[
-                  tw`mb-4 text-center`,
-                  { color: "#87DAF0", fontFamily: "Joan", fontSize: h1Size },
-                ]}
-              >
-                Create a Profile
-              </Text>
-
-              <View style={tw`items-center mb-2`}>
-                <Svg
-                  width={profileIconSize * 0.8}
-                  height={profileIconSize * 0.8}
-                  viewBox="0 0 16 16"
-                  fill="#000000ff"
-                >
-                  <Path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6m2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0m4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4m-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10s-3.516.68-4.168 1.332c-.678.678-.83 1.418-.832 1.664z" />
-                </Svg>
-              </View>
-            </View>
+              Create your Fitness profile
+            </Text>
+            <Text
+              style={[
+                tw`mt-1 text-center`,
+                { color: "#6B7280", fontSize: bodySize },
+              ]}
+            >
+              We’ll use this to personalize your training experience.
+            </Text>
           </View>
           {/* first and last name input fields */}
-          <View style={{ width: maxWidth, alignSelf: "center" }}>
+          <View style={{ width: "100%", marginTop: 12 }}>
+            <Text
+              style={[
+                tw`mb-1`,
+                { color: "#6B7280", fontSize: bodySize - 1 },
+              ]}
+            >
+              Basic info
+            </Text>
             <View
               style={[
-                tw`w-full  `,
+                tw`w-full`,
                 { flexDirection: isNarrow ? "column" : "row" },
               ]}
             >
               <TextInput
                 placeholder="First name"
                 value={firstName}
-                onChangeText={setFirstName}
+                onChangeText={(val) => {
+                  setFirstName(val);
+                  if (firstNameError) setFirstNameError("");
+                }}
                 autoCapitalize="words"
                 keyboardType="default"
                 style={[
@@ -401,29 +426,60 @@ export default function Register() {
                 textContentType="givenName"
                 autoComplete="given-name"
                 returnKeyType="next"
+                accessibilityLabel="First name"
+                accessibilityHint="Enter your first name."
+                accessibilityState={{ invalid: !!firstNameError }}
               />
               <TextInput
                 placeholder="Last name"
                 value={lastName}
-                onChangeText={setLastName}
+                onChangeText={(val) => {
+                  setLastName(val);
+                  if (lastNameError) setLastNameError("");
+                }}
                 autoCapitalize="words"
                 style={[tw`bg-white rounded-xl px-4 py-3`, { flex: 1 }]}
                 placeholderTextColor="#9CA3AF"
                 textContentType="familyName"
                 autoComplete="family-name"
                 returnKeyType="done"
+                accessibilityLabel="Last name"
+                accessibilityHint="Enter your last name."
+                accessibilityState={{ invalid: !!lastNameError }}
               />
             </View>
+            {firstNameError || lastNameError ? (
+              <Text
+                accessibilityLiveRegion="polite"
+                style={[
+                  tw`mt-2`,
+                  {
+                    color: "#F87171",
+                    fontSize: 14,
+                  },
+                ]}
+              >
+                {firstNameError || lastNameError}
+              </Text>
+            ) : null}
           </View>
           {/* email and password input fields */}
-          <View style={[tw` items-center `, { paddingHorizontal: 16 }]}>
+          <View style={{ width: "100%", marginTop: 20 }}>
             <View
               style={{
-                width: maxWidth,
+                width: "100%",
                 alignSelf: "center",
-                paddingVertical: isShort ? 16 : 24,
+                paddingVertical: isShort ? 14 : 20,
               }}
             >
+              <Text
+                style={[
+                  tw`mb-1`,
+                  { color: "#6B7280", fontSize: bodySize - 1 },
+                ]}
+              >
+                Account details
+              </Text>
               <View style={tw`items-center mb-2`}>
                 <Svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -509,7 +565,10 @@ export default function Register() {
                     <TextInput
                       placeholder="Your password"
                       value={password}
-                      onChangeText={setPassword}
+                      onChangeText={(val) => {
+                        setPassword(val);
+                        if (passwordError) setPasswordError("");
+                      }}
                       secureTextEntry
                       autoCapitalize="none"
                       autoCorrect={false}
@@ -526,20 +585,38 @@ export default function Register() {
                       textContentType="password"
                       autoComplete="password"
                       returnKeyType="done"
+                      accessibilityLabel="Password"
+                      accessibilityHint="Create a password with at least 8 characters."
+                      accessibilityState={{ invalid: !!passwordError }}
                     />
+                    {passwordError ? (
+                      <Text
+                        accessibilityLiveRegion="polite"
+                        style={[
+                          tw`mt-1`,
+                          {
+                            color: "#F87171",
+                            fontSize: 14,
+                            marginLeft: 4,
+                          },
+                        ]}
+                      >
+                        {passwordError}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
               </View>
             </View>
           </View>
 
-          {/* profile photo upload placeholder circle */}
-          <View style={[tw`items-center mt-2`]}>
+          {/* profile photo upload */}
+          <View style={[tw`items-center mt-4 mb-6`]}>
             <TouchableOpacity
               style={[
                 tw`rounded-full`,
                 {
-                  backgroundColor: "#D9D9D9",
+                  backgroundColor: "#E5E7EB",
                   width: profileIconSize,
                   height: profileIconSize,
                   justifyContent: "center",
@@ -547,6 +624,9 @@ export default function Register() {
                 },
               ]}
               onPress={pickImage}
+              accessibilityRole="button"
+              accessibilityLabel={photo ? "Change profile photo" : "Upload profile photo"}
+              accessibilityHint="Opens your photo library so you can set a profile picture."
             >
               {photo ? (
                 <Image
@@ -559,64 +639,80 @@ export default function Register() {
                   }}
                 />
               ) : (
-                <Text style={{ color: "#000", fontSize: 14, textAlign: "center" }}>
-                  Upload Photo
+                <Text
+                  style={{ color: "#4B5563", fontSize: 13, textAlign: "center" }}
+                >
+                  Add a profile photo
                 </Text>
               )}
             </TouchableOpacity>
           </View>
 
-           {/* face id section */}
-              <TouchableOpacity
-                onPress={toggleBiometrics}
-                activeOpacity={0.8}
-                accessibilityRole="checkbox"
-                accessibilityState={{
-                  checked: useBiometrics,
-                  disabled: !biometricSupported,
-                }}
-                disabled={!biometricSupported || authBusy}
-                style={[
-                  { width: maxWidth, alignSelf: "center", paddingHorizontal: isShort ? 16 : 24 },
-                  tw`flex-row items-center justify-between mt-4 mb-6`
-                ]}
-              >
-                <Text style={tw`text-base text-gray-900 text-lg`}>
-                  Use {biometricLabel} to login
-                </Text>
-                {/* face id checkbox */}
-                <View
-                  style={tw`w-6 h-6 rounded-md border bg-white items-center justify-center`}
-                >
-                  {useBiometrics ? <Text style={tw`text-black`}>✓</Text> : null}
-                </View>
-              </TouchableOpacity>
+          {/* face id section */}
+          <TouchableOpacity
+            onPress={toggleBiometrics}
+            activeOpacity={0.8}
+            accessibilityRole="checkbox"
+            accessibilityLabel={`Use ${biometricLabel} to login`}
+            accessibilityHint={
+              biometricSupported
+                ? `Double tap to ${useBiometrics ? "disable" : "enable"} ${biometricLabel} for faster login.`
+                : `${biometricLabel} is not available on this device.`
+            }
+            accessibilityState={{
+              checked: useBiometrics,
+              disabled: !biometricSupported,
+            }}
+            disabled={!biometricSupported || authBusy}
+            style={[
+              { width: "100%", alignSelf: "center" },
+              tw`flex-row items-center justify-between mt-3 mb-6`,
+            ]}
+          >
+            <Text style={tw`text-lg text-gray-900`}>
+              Use {biometricLabel} to login
+            </Text>
+            {/* face id checkbox */}
+            <View
+              style={tw`w-6 h-6 rounded-md border bg-white items-center justify-center`}
+            >
+              {useBiometrics ? <Text style={tw`text-black`}>✓</Text> : null}
+            </View>
+          </TouchableOpacity>
 
-              <Pressable
-                style={({ pressed }) => [
-                  tw`rounded-xl py-3 mt-3 `,
-                  {
-                    width: maxWidth,
-                    alignSelf: "center",
-                    backgroundColor: submitBusy ? "#a3c7de" : pressed ? "#5a9cc6" : "#8CBFDF",
-                  },
-                ]}
-                onPress={handleCreateAccount}
-                accessibilityRole="button"
-                accessibilityLabel="Create Account"
-                disabled={submitBusy}
-              >
-                <Text
-                  style={[
-                    tw`text-black text-center font-semibold text-xl`,
-                    { fontFamily: "Manrope" },
-                  ]}
-                >
-                  Start Sweating
-                </Text>
-              </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              tw`rounded-xl py-3 mt-2`,
+              {
+                width: "100%",
+                alignSelf: "center",
+                backgroundColor: submitBusy
+                  ? "#9BB9CF"
+                  : pressed
+                  ? "#5a9cc6"
+                  : "#8CBFDF",
+                opacity: submitBusy ? 0.9 : 1,
+              },
+            ]}
+            onPress={handleCreateAccount}
+            accessibilityRole="button"
+            accessibilityLabel="Create your Fitness account"
+            accessibilityHint="Submits your details to create a new account."
+            disabled={submitBusy}
+          >
+            <Text
+              style={[
+                tw`text-white text-center font-semibold text-xl`,
+                { fontFamily: "Manrope" },
+              ]}
+            >
+              {submitBusy ? "Creating account…" : "Start Sweating"}
+            </Text>
+          </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </LinearGradient>
   );
 }
