@@ -21,6 +21,7 @@ import * as SecureStore from "expo-secure-store";
 import * as ImagePicker from "expo-image-picker";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { resolveApiBase } from "../../utils/api";
 import { useNavigation } from "@react-navigation/native";
 
 export default function Register() {
@@ -42,7 +43,11 @@ export default function Register() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [photo, setPhoto] = useState(null); 
+  const [photo, setPhoto] = useState(null);
+  const [firstNameError, setFirstNameError] = useState("");
+  const [lastNameError, setLastNameError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
   // * biometrics (Face ID / Touch ID)
   const [biometricSupported, setBiometricSupported] = useState(false);
@@ -61,10 +66,17 @@ export default function Register() {
         const supportsFace = types?.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
         const supportsFingerprint = types?.includes(LocalAuthentication.AuthenticationType.FINGERPRINT);
         setBiometricSupported(!!(hasHardware && isEnrolled && types && types.length > 0));
-        setBiometricLabel(supportsFace ? "Face ID" : supportsFingerprint ? "Touch ID" : "Biometrics");
-        // restore saved preference
-        const saved = await SecureStore.getItemAsync("useBiometrics");
+        setBiometricLabel(
+          supportsFace ? "Face ID" : supportsFingerprint ? "Touch ID" : "Biometrics"
+        );
+        // restore saved preference (support both legacy and new keys)
+        const savedUnderscore = await SecureStore.getItemAsync("use_biometrics");
+        const savedCamel = await SecureStore.getItemAsync("useBiometrics");
+        const saved = savedUnderscore ?? savedCamel;
         setUseBiometrics(saved === "true");
+        if (!savedUnderscore && savedCamel) {
+          await SecureStore.setItemAsync("use_biometrics", savedCamel);
+        }
       } catch (e) {
         setBiometricSupported(false);
       }
@@ -89,9 +101,9 @@ export default function Register() {
       }
       const next = !useBiometrics;
       setUseBiometrics(next);
-      await SecureStore.setItemAsync("useBiometrics", next ? "true" : "false");
+      await SecureStore.setItemAsync("use_biometrics", next ? "true" : "false");
       if (next && email) {
-        await SecureStore.setItemAsync("biometricEmail", email);
+        await SecureStore.setItemAsync("biometricEmail", email.trim().toLowerCase());
       }
     } catch (err) {
       Alert.alert("Error", "There was a problem updating your biometric preference.");
@@ -100,44 +112,56 @@ export default function Register() {
     }
   };
 
-  // * Call this after your account creation succeeds (e.g., in your submit handler)
-  const persistBiometricAfterSignup = async (userEmail) => {
-    try {
-      if (useBiometrics) {
-        await SecureStore.setItemAsync("useBiometrics", "true");
-        if (userEmail) await SecureStore.setItemAsync("biometricEmail", userEmail);
-      }
-    } catch {}
-  };
+
 
   const handleCreateAccount = async () => {
     if (submitBusy) return;
 
-    // basic validation
-    if (!firstName.trim() || !lastName.trim()) {
-      Alert.alert("Missing info", "Please enter your first and last name.");
-      return;
+    // normalize and validate inputs
+    const normalizedFirst = firstName.trim();
+    const normalizedLast = lastName.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    let hasError = false;
+
+    if (!normalizedFirst) {
+      setFirstNameError("First name is required.");
+      hasError = true;
     }
-    if (!email.trim()) {
-      Alert.alert("Missing email", "Please enter your email address.");
-      return;
+
+    if (!normalizedLast) {
+      setLastNameError("Last name is required.");
+      hasError = true;
     }
-    if (!password || password.length < 6) {
-      Alert.alert("Password too short", "Use at least 6 characters.");
+
+    if (!normalizedEmail) {
+      setEmailError("Email is required.");
+      hasError = true;
+    }
+
+    if (!password) {
+      setPasswordError("Password is required.");
+      hasError = true;
+    } else if (password.length < 8) {
+      setPasswordError("Password must be at least 8 characters.");
+      hasError = true;
+    }
+
+    if (hasError) {
       return;
     }
 
     try {
       setSubmitBusy(true);
 
-      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const baseURL = resolveApiBase();
       const url = `${baseURL}/users/register`;
 
       // Build multipart form data to support optional avatar upload
       const form = new FormData();
-      form.append("firstName", firstName.trim());
-      form.append("lastName", lastName.trim());
-      form.append("email", email.trim().toLowerCase());
+      form.append("firstName", normalizedFirst);
+      form.append("lastName", normalizedLast);
+      form.append("email", normalizedEmail);
       form.append("password", password);
 
       if (photo) {
@@ -188,8 +212,8 @@ export default function Register() {
       // Persist Face ID preference & email if user opted in
       try {
         if (useBiometrics) {
-          await SecureStore.setItemAsync("useBiometrics", "true");
-          await SecureStore.setItemAsync("biometricEmail", email.trim().toLowerCase());
+          await SecureStore.setItemAsync("use_biometrics", "true");
+          await SecureStore.setItemAsync("biometricEmail", normalizedEmail);
         }
       } catch {}
 
@@ -422,7 +446,10 @@ export default function Register() {
                     <TextInput
                       placeholder="Your email"
                       value={email}
-                      onChangeText={setEmail}
+                      onChangeText={(val) => {
+                        setEmail(val);
+                        if (emailError) setEmailError("");
+                      }}
                       autoCapitalize="none"
                       keyboardType="email-address"
                       style={[
@@ -437,7 +464,25 @@ export default function Register() {
                       textContentType="emailAddress"
                       autoComplete="email"
                       returnKeyType="next"
+                      accessibilityLabel="Email address"
+                      accessibilityHint="Enter the email you want to use for your Fitness account."
+                      accessibilityState={{ invalid: !!emailError }}
                     />
+                    {emailError ? (
+                      <Text
+                        accessibilityLiveRegion="polite"
+                        style={[
+                          tw`mt-1`,
+                          {
+                            color: "#F87171",
+                            fontSize: 14,
+                            marginLeft: 4,
+                          },
+                        ]}
+                      >
+                        {emailError}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
               </View>
