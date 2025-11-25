@@ -23,6 +23,7 @@ import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useUser } from "../../components/UserContext";
+import { resolveApiBase } from "../../utils/api";
 
 // Reusable exercise card
 
@@ -357,8 +358,8 @@ export default function TodaysSession({ navigation, route }) {
       try {
         token = await SecureStore.getItemAsync("authToken");
       } catch (_) {}
-      // Ensure API_BASE does not include `/api` so the URL is correct.
-      const API_BASE = process.env.EXPO_PUBLIC_API_BASE || "http://localhost:3004";
+      // Use shared API base so URLs are consistent across Home/Sessions/TodaysSession
+      const API_BASE = resolveApiBase();
       const { userId, programId } = await resolveAuthAndProgramIds(p, API_BASE, token);
       console.log("[TodaysSession] resolved IDs", { userId, programId });
 

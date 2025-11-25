@@ -26,6 +26,7 @@ import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useUser } from "../../components/UserContext";
+import { resolveApiBase } from "../../utils/api";
 
 // A day is completed if it has an explicit completed flag OR if all of its workouts are completed.
 const isDayCompleted = (day) => {
@@ -129,8 +130,10 @@ const deriveWeekRows = (programLike, fallbackDuration) => {
 };
 
 export default function Sessions({ navigation, route }) {
-  const { user } =
-    useUser && typeof useUser === "function" ? useUser() : { user: null };
+  const { user, pendingOps, syncPendingOps } =
+    useUser && typeof useUser === "function"
+      ? useUser()
+      : { user: null, pendingOps: [], syncPendingOps: undefined };
   const [loading, setLoading] = useState(false);
   const [noProgram, setNoProgram] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -161,10 +164,7 @@ export default function Sessions({ navigation, route }) {
     })
   ).current;
 
-  const resolveBaseURL = () =>
-    Platform.OS === "android"
-      ? "http://10.0.2.2:3004"
-      : "http://localhost:3004";
+  const resolveBaseURL = () => resolveApiBase();
 
   const fetchProgram = useCallback(async () => {
     try {
@@ -201,7 +201,28 @@ export default function Sessions({ navigation, route }) {
         } catch {}
         return;
       }
-      const url = `${resolveBaseURL()}/users/${encodeURIComponent(
+
+      const baseURL = resolveBaseURL();
+
+      // Attempt to sync any pending offline operations (workouts/foods)
+      if (
+        typeof syncPendingOps === "function" &&
+        pendingOps &&
+        pendingOps.length > 0 &&
+        token
+      ) {
+        try {
+          await syncPendingOps({
+            userId,
+            authToken: token,
+            baseUrl: baseURL,
+          });
+        } catch (syncErr) {
+          console.error("[Sessions] syncPendingOps error:", syncErr);
+        }
+      }
+
+      const url = `${baseURL}/users/${encodeURIComponent(
         userId
       )}/training-programs`;
       const res = await fetch(url, {
@@ -254,7 +275,7 @@ export default function Sessions({ navigation, route }) {
     } finally {
       setLoading(false);
     }
-  }, [user, navigation, route]);
+  }, [user, navigation, route, pendingOps, syncPendingOps]);
 
   useFocusEffect(
     useCallback(() => {
