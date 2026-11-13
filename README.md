@@ -1,6 +1,8 @@
 # FITNESS — Client
 
-A React Native (Expo) fitness app for following structured training programs, generating daily workouts, and logging workouts and food on a calendar. The app is built **offline-first**: sessions, progress, and food logs keep working without a connection and sync back to the server once you're online again.
+A React Native (Expo) fitness app for following structured training programs, generating daily workouts, and logging workouts and food on a calendar. After you sign in once with a connection, the app **keeps working offline**: completed workouts and food logs are saved on the device first and sync back to the server once you're online again.
+
+**Case study:** [How FITNESS is designed and built, client and server](https://arturoa925.github.io/projects/fitness/) on my portfolio, covering the architecture, code decisions and trade-offs.
 
 > This repo is the mobile client. It talks to a separate REST API (default `http://localhost:3004`).
 
