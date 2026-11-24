@@ -14,6 +14,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Lint (fails on errors; warnings are tracked but allowed)
+        run: npm run lint
+      - name: Unit tests (auth/session + Face ID logic)
+        run: npm test
       # Compiles every screen and import into a real iOS (Hermes) bundle. Catches broken
       # imports, syntax errors and missing dependencies without needing a simulator.
       - name: Compile iOS bundle

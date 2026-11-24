@@ -17,8 +17,8 @@ function decodeJwt(token) {
           .call(atob(b64), (c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
           .join("")
       );
-    } else if (typeof Buffer !== "undefined") {
-      json = Buffer.from(b64, "base64").toString("utf8");
+    } else if (typeof globalThis.Buffer !== "undefined") {
+      json = globalThis.Buffer.from(b64, "base64").toString("utf8");
     } else {
       return {};
     }

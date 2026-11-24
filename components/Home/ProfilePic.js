@@ -77,9 +77,7 @@ export default function ProfileAvatarMenu({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes:
-          (ImagePicker.MediaType && ImagePicker.MediaType.Images) ||
-          ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -235,7 +233,9 @@ export default function ProfileAvatarMenu({
         return;
       }
       await disableBiometric(null);
+      // deleting an account also forgets the remembered email on this phone
       await SecureStore.deleteItemAsync("biometricEmail").catch(() => {});
+      await SecureStore.deleteItemAsync("lastLoginEmail").catch(() => {});
       await clearSession();
       await resetLocalState();
       setDeleteOpen(false);
@@ -679,7 +679,7 @@ const handleLogout = async () => {
               Delete your account?
             </Text>
             <Text style={{ fontFamily: "Manrope", fontSize: 15, color: "#333", marginBottom: 14 }}>
-              This permanently deletes your profile, programs, calendar and food log. It can't be undone.
+              This permanently deletes your profile, programs, calendar and food log. It can&apos;t be undone.
             </Text>
             <TextInput
               placeholder="Password (leave empty if you use Google/GitHub)"

@@ -20,9 +20,8 @@ Branch: `claude/determined-lovelace-lxs1ad`. Server-side changes and the full wr
 - Release identifiers are placeholders (`com.anonymous.client`, app name `client`) — set real ones before App Store submission.
 - Biometrics only gate the login screen, not cold start with a saved token.
 - `AsyncStorage.setItem` is called inside `setState` updaters in `UserContext` (can double-run in StrictMode / write out of order).
-- Client `npm audit` shows 38 advisories (mostly Expo tooling); not changed because fixes mean an Expo SDK upgrade.
+- Client `npm audit` still shows 38 advisories (all in Expo/Metro build tooling, none in code that ships in the app). `npm audit fix` was tried and **reverted**: it pulled a nested copy of Expo 58 beside SDK 54 (duplicate native modules, which breaks native builds). The real fix is an Expo SDK upgrade on its own branch.
 - Screens other than AuthGate don't yet react to a 401 mid-session (they just show their error state).
-- No lint yet.
 
 ## Update: session handling
 - Access tokens are now **15 minutes**; a rotating **refresh token** (30 days, sliding) keeps users signed in. `lib/http.js` refreshes silently on a 401 and retries the request; only if the refresh token is gone/revoked/expired does the app wipe the session and return to Welcome. A network failure while refreshing keeps the user signed in.
@@ -37,3 +36,9 @@ Branch: `claude/determined-lovelace-lxs1ad`. Server-side changes and the full wr
 - **Verify email:** `VerifyEmail` screen, reachable from the profile menu ("Verify email" shows only for unverified email/password accounts). The sign-up alert tells new users a code was emailed.
 - **Profile menu:** *Sign out of all devices* (revokes every session and Face ID device, then signs out here) and *Delete account* (confirmation dialog, password required for accounts that have one; wipes local data and returns to Welcome).
 - Requires the server's `RESEND_API_KEY` + `EMAIL_FROM` to deliver real email (otherwise codes print in the server console in dev).
+
+## Update: code health
+- **ESLint** (`npm run lint`, expo config): 0 errors, 56 warnings (leftover unused locals such as `h1Size`, hook-dependency notes). Real fixes it found: `Sessions.js` called `useUser()` conditionally (rules-of-hooks violation), `expo-image-picker` was given the removed/type-only `MediaType` enum (now `mediaTypes: ["images"]`), 56 unused imports across screens, dead `toggleBiometrics`.
+- **Unit tests** (`npm test`, 16): `lib/auth.js` and `lib/biometric.js` run on Node's test runner with stand-ins for the Expo/RN modules. They assert, for example, that the Face ID token is stored with `requireAuthentication`, that a 401 clears Face ID locally while a network error does not, that rotated tokens are saved, and that logout keeps device Face ID settings. `tests/interceptor/` additionally exercises silent refresh against a live server.
+- CI now runs lint, unit tests and the iOS bundle compile.
+- `account deletion` also forgets the remembered email (`lastLoginEmail`) on the phone.

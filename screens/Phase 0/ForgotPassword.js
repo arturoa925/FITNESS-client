@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  View,
   Text,
   TextInput,
   Pressable,
@@ -13,7 +12,7 @@ import {
 import tw from "twrnc";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { resolveApiBase } from "../../utils/api";
-import { persistSession, normalizeUser } from "../../lib/auth";
+import { persistSession } from "../../lib/auth";
 import { enrollBiometric, isBiometricEnrolled } from "../../lib/biometric";
 import { useUser } from "../../components/UserContext";
 

@@ -13,8 +13,8 @@ import {
   ScrollView,
   Image,
   Linking,
+  PanResponder,
 } from "react-native";
-import { PanResponder } from "react-native";
 import tw from "twrnc";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
@@ -299,17 +299,13 @@ export default function Register() {
         return;
       }
 
-      // Use the new API when available; otherwise, omit mediaTypes to use the default (Images)
-      const hasNewEnum = !!ImagePicker.MediaType && !!ImagePicker.MediaType.Images;
       const options = {
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.9,
         selectionLimit: 1,
       };
-      if (hasNewEnum) {
-        options.mediaTypes = [ImagePicker.MediaType.Images];
-      }
 
       const result = await ImagePicker.launchImageLibraryAsync(options);
 

@@ -4,12 +4,7 @@ import { View, Animated, StyleSheet } from "react-native";
 import tw from "twrnc";
 import { useFonts } from "expo-font";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-// import AppLoading from "expo-app-loading";
-
-// * User context
 import { UserProvider } from "./components/UserContext";
-
-// * phase 0 screens
 import Loading from "./screens/Phase 0/Loading";
 import Welcome from "./screens/Phase 0/Welcome";
 import Register from "./screens/Phase 0/Register";
@@ -17,25 +12,18 @@ import OutsideAuth from "./screens/Phase 0/OutsideAuth";
 import AuthGate from "./screens/Phase 0/AuthGate";
 import ForgotPassword from "./screens/Phase 0/ForgotPassword";
 import VerifyEmail from "./screens/Phase 0/VerifyEmail";
-
-// * phase 1 screens
 import Home from "./screens/Phase 1/Home";
-
-// * phase 2 screens
 import Sessions from "./screens/Phase 2/Sessions";
 import DailyGrind from "./screens/Phase 2/DailyGrind";
-
-// * phase 3 screens
 import TodaysSession from "./screens/Phase 3/TodaysSession";
 import ProgramDetails from "./screens/Phase 3/ProgramDetails";
-
 import { NavigationContainer } from "@react-navigation/native";
 import { navigationRef } from "./lib/navigation";
 import { installAuthInterceptor } from "./lib/http";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 // Return to Welcome automatically whenever the server says the session has expired.
 installAuthInterceptor();
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
 const Stack = createNativeStackNavigator();
 
 export default function App() {

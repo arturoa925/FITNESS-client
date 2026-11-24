@@ -1,5 +1,5 @@
 // client/screens/Welcome.js
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -19,14 +19,17 @@ import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
 import * as WebBrowser from "expo-web-browser";
-WebBrowser.maybeCompleteAuthSession();
-import * as Linking from "expo-linking";
 import { makeRedirectUri } from "expo-auth-session";
 import { useUser } from "../../components/UserContext";
 import { decode as atob } from "base-64";
-import { section, json, info, warn, error, success } from "../../components/logger";
+import {
+  section,
+  json,
+  info,
+  warn,
+  error,
+} from "../../components/logger";
 import { resolveApiBase } from "../../utils/api";
 import { persistSession } from "../../lib/auth";
 import {
@@ -36,6 +39,7 @@ import {
   isBiometricEnrolled,
   offerBiometricEnrollment,
 } from "../../lib/biometric";
+WebBrowser.maybeCompleteAuthSession();
 
 export default function Welcome({ navigation, route }) {
   LogBox.ignoreLogs([
@@ -183,38 +187,6 @@ export default function Welcome({ navigation, route }) {
       error("Biometric login error", e);
     } finally {
       setAuthBusy(false);
-    }
-  };
-
-  // * toggle handler for face id
-  const toggleBiometrics = async () => {
-    if (authBusy) return;
-    section("Toggle biometrics pressed");
-    json("State", { useBiometrics, biometricSupported });
-    if (!useBiometrics) {
-      if (!biometricSupported) return;
-      try {
-        setAuthBusy(true);
-        const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: `Enable ${biometricLabel}`,
-          cancelLabel: "Cancel",
-          disableDeviceFallback: true,
-        });
-        json("Toggle biometrics: auth result", result);
-        if (result.success) {
-          setUseBiometrics(true);
-          await SecureStore.setItemAsync("use_biometrics", "true");
-        }
-        // do nothing on cancel/failure
-      } finally {
-        info("Toggle biometrics: done");
-        setAuthBusy(false);
-      }
-    } else {
-      warn("Toggle biometrics: disabling");
-      setUseBiometrics(false);
-      setBiometricEnrolled(false);
-      await disableBiometric(null);
     }
   };
 

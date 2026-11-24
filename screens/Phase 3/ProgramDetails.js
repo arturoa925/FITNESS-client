@@ -1,29 +1,20 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useUser } from "../../components/UserContext";
-import { LinearGradient } from "expo-linear-gradient";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   Alert,
   Platform,
-  Pressable,
   useWindowDimensions,
   KeyboardAvoidingView,
   ScrollView,
-  Image,
-  Animated,
-  Easing,
   PanResponder,
 } from "react-native";
 import tw from "twrnc";
-import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
-import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
-import Constants from "expo-constants";
 
 import { resolveApiBase } from "../../utils/api";
 

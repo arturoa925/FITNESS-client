@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   Alert,
   Platform,
@@ -11,25 +10,17 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Image,
-  Animated,
-  Easing,
-  Modal,
 } from "react-native";
 import tw from "twrnc";
-import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import { clearSession } from "../../lib/auth";
-import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Calendar } from "react-native-calendars";
-import { Picker } from "@react-native-picker/picker";
-import { TouchableWithoutFeedback } from "react-native";
-
-import { FlatList } from "react-native";
-
 import { resolveApiBase } from "../../utils/api";
+import { useUser } from "../../components/UserContext";
+import ProfileAvatarMenu from "../../components/Home/ProfilePic";
+import ProgressBar from "../../components/Home/CurrentWeekBar";
+import CalendarFoodLog from "../../components/Home/Calendar";
 
 // Normalize weeks from different backend shapes
 const deriveWeeksFromProgram = (programLike, fallbackDuration) => {
@@ -141,12 +132,8 @@ const getProgramHeroImage = (program) => {
 };
 
 // * user context
-import { useUser } from "../../components/UserContext";
 
 // * components
-import ProfileAvatarMenu from "../../components/Home/ProfilePic";
-import ProgressBar from "../../components/Home/CurrentWeekBar";
-import CalendarFoodLog from "../../components/Home/Calendar";
 
 export default function Home({ navigation, route }) {
   const { width, height, fontScale } = useWindowDimensions();
@@ -604,7 +591,7 @@ export default function Home({ navigation, route }) {
                       { color: "black", fontFamily: "Joan" },
                     ]}
                   >
-                    Welcome to Today's Sweat
+                    Welcome to Today&apos;s Sweat
                   </Text>
 
                   <Text
