@@ -165,7 +165,8 @@ export default function Home({ navigation, route }) {
   const handleLogout = async () => {
     try {
       const token = await SecureStore.getItemAsync("authToken");
-      // Best effort: tell the server (it can't revoke JWTs, but keeps a log).
+      const refreshToken = await SecureStore.getItemAsync("refreshToken");
+      // Best effort: revoke this session's refresh token on the server.
       // Never block logging out on a network failure.
       if (token) {
         try {
@@ -175,6 +176,7 @@ export default function Home({ navigation, route }) {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
+            body: JSON.stringify({ refreshToken }),
           });
         } catch {}
       }

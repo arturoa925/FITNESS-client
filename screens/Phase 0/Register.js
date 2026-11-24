@@ -217,7 +217,7 @@ export default function Register() {
       // Sign the new user in fully (userId, cached profile, context) so Home has everything.
       try {
         if (token && data.user) {
-          setUser(await persistSession({ token, user: data.user }));
+          setUser(await persistSession({ token, refreshToken: data.refreshToken, user: data.user }));
         }
       } catch (e) {
         console.warn("[Register] could not persist session:", e?.message);

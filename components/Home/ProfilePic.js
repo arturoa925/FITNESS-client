@@ -392,11 +392,19 @@ export default function ProfileAvatarMenu({
         return;
       }
 
-      await res.json();
+      const updated = await res.json().catch(() => ({}));
+      // The server ended every other session; keep this one with the fresh tokens it sent.
+      if (updated?.session?.token) {
+        await SecureStore.setItemAsync("authToken", updated.session.token);
+        if (updated.session.refreshToken) {
+          await SecureStore.setItemAsync("refreshToken", updated.session.refreshToken);
+        }
+      }
+      const freshToken = updated?.session?.token || token;
       // Changing a password signs out every Face ID device on the server. If it was on,
       // re-enroll this phone now (we're signed in) so Face ID keeps working seamlessly.
       try {
-        if (await isBiometricEnrolled()) await enrollBiometric(token, bioLabel);
+        if (await isBiometricEnrolled()) await enrollBiometric(freshToken, bioLabel);
       } catch {}
       setPasswordOpen(false);
       setEditPassword("");

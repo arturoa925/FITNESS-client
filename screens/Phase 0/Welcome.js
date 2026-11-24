@@ -175,7 +175,7 @@ export default function Welcome({ navigation, route }) {
         return;
       }
 
-      const normalized = await persistSession({ token: res.token, user: res.user });
+      const normalized = await persistSession({ token: res.token, refreshToken: res.refreshToken, user: res.user });
       setUser(normalized);
       setRateLimited(false);
       navigation.replace("Home");
@@ -464,6 +464,7 @@ export default function Welcome({ navigation, route }) {
         const hash = result.url.split("#")[1] || "";
         const params = new URLSearchParams(hash);
         const token = params.get("token");
+        const refreshTokenParam = params.get("refreshToken");
         const emailParam = params.get("email");
         const nameParam = params.get("name");
         const photo = params.get("photo");
@@ -551,6 +552,7 @@ export default function Welcome({ navigation, route }) {
           try {
             if (token) {
               await SecureStore.setItemAsync("authToken", String(token));
+              if (refreshTokenParam) await SecureStore.setItemAsync("refreshToken", String(refreshTokenParam));
             }
             await SecureStore.setItemAsync(
               "cachedUserProfile",
@@ -601,6 +603,7 @@ export default function Welcome({ navigation, route }) {
         const hash = result.url.split("#")[1] || "";
         const params = new URLSearchParams(hash);
         const token = params.get("token");
+        const refreshTokenParam = params.get("refreshToken");
         const emailParam = params.get("email");
         const nameParam = params.get("name");
         const photo = params.get("photo");
@@ -667,6 +670,7 @@ export default function Welcome({ navigation, route }) {
           try {
             if (token) {
               await SecureStore.setItemAsync("authToken", String(token));
+              if (refreshTokenParam) await SecureStore.setItemAsync("refreshToken", String(refreshTokenParam));
             }
             await SecureStore.setItemAsync(
               "cachedUserProfile",
