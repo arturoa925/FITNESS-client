@@ -878,6 +878,24 @@ export default function Welcome({ navigation, route }) {
                     {passwordError}
                   </Text>
                 ) : null}
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("ForgotPassword", { email: email.trim() })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Forgot password"
+                  accessibilityHint="Emails you a code to reset your password."
+                  style={tw`self-end py-1 mb-2`}
+                >
+                  <Text
+                    style={{
+                      color: "white",
+                      textDecorationLine: "underline",
+                      fontFamily: "Manrope",
+                      fontSize: bodySize - 1,
+                    }}
+                  >
+                    Forgot password?
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               {/* primary login button */}

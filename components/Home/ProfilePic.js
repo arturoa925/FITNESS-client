@@ -21,6 +21,7 @@ import {
   disableBiometric,
 } from "../../lib/biometric";
 import { resolveApiBase } from "../../utils/api";
+import { useUser } from "../UserContext";
 import * as ImagePicker from "expo-image-picker";
 
 export default function ProfileAvatarMenu({
@@ -48,6 +49,15 @@ export default function ProfileAvatarMenu({
   const [bioLabel, setBioLabel] = useState("Face ID");
   const [bioEnabled, setBioEnabled] = useState(false);
   const [bioBusy, setBioBusy] = useState(false);
+  const { resetLocalState } = useUser();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  // Local (email/password) accounts that haven't confirmed their email yet.
+  const verified = (user?.isVerified ?? user?.raw?.isVerified) === true;
+  const needsVerify = !!user?.id && (user?.provider || "local") === "local" && !verified;
   // Pick and upload new avatar image
   const handlePickAvatar = async () => {
     if (!user || !user.id) {
@@ -176,6 +186,68 @@ export default function ProfileAvatarMenu({
     })();
     return () => { alive = false; };
   }, [open]);
+
+  // Ends every session and Face ID device on the server, then signs out here too.
+  const signOutEverywhere = () => {
+    setOpen(false);
+    Alert.alert(
+      "Sign out of all devices?",
+      "You'll be signed out on this phone and every other device, and Face ID will be turned off everywhere.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign out everywhere",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await SecureStore.getItemAsync("authToken");
+              await fetch(`${resolveApiBase()}/auth/logout-all`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: "{}",
+              });
+            } catch {}
+            await disableBiometric(null); // clear this phone's Face ID token too
+            await handleLogout();
+          },
+        },
+      ]
+    );
+  };
+
+  const deleteAccount = async () => {
+    if (deleting) return;
+    setDeleteError("");
+    setDeleting(true);
+    try {
+      const token = await SecureStore.getItemAsync("authToken");
+      const res = await fetch(`${resolveApiBase()}/users/${user.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ confirm: "DELETE", password: deletePassword || undefined }),
+      });
+      if (res.status === 403) {
+        setDeleteError("That password is incorrect.");
+        return;
+      }
+      if (!res.ok) {
+        setDeleteError("We couldn't delete your account. Please try again.");
+        return;
+      }
+      await disableBiometric(null);
+      await SecureStore.deleteItemAsync("biometricEmail").catch(() => {});
+      await clearSession();
+      await resetLocalState();
+      setDeleteOpen(false);
+      setDeletePassword("");
+      Alert.alert("Account deleted", "Your account and all of its data have been permanently deleted.");
+      navigation?.replace?.("Welcome", { fromLogout: true });
+    } catch {
+      setDeleteError("Couldn't reach the server. Check your connection and try again.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const toggleFaceId = async (next) => {
     if (bioBusy) return;
@@ -554,6 +626,38 @@ const handleLogout = async () => {
                 <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
               </>
             ) : null}
+            {needsVerify ? (
+              <>
+                <TouchableOpacity
+                  onPress={() => { setOpen(false); navigation?.navigate?.("VerifyEmail"); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Verify your email"
+                  style={{ paddingVertical: 12, paddingHorizontal: 14 }}
+                >
+                  <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}>Verify email</Text>
+                </TouchableOpacity>
+                <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
+              </>
+            ) : null}
+            <TouchableOpacity
+              onPress={signOutEverywhere}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out of all devices"
+              style={{ paddingVertical: 12, paddingHorizontal: 14 }}
+            >
+              <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}>Sign out of all devices</Text>
+            </TouchableOpacity>
+            <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
+            <TouchableOpacity
+              onPress={() => { setOpen(false); setDeleteError(""); setDeletePassword(""); setDeleteOpen(true); }}
+              accessibilityRole="button"
+              accessibilityLabel="Delete account"
+              accessibilityHint="Opens a confirmation to permanently delete your account."
+              style={{ paddingVertical: 12, paddingHorizontal: 14 }}
+            >
+              <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#B00020" }}>Delete account</Text>
+            </TouchableOpacity>
+            <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
             <TouchableOpacity
               onPress={handleLogout}
               accessibilityRole="button"
@@ -563,6 +667,57 @@ const handleLogout = async () => {
             >
               <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#B00020" }}>Log out</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete account confirmation */}
+      <Modal visible={deleteOpen} transparent animationType="fade" onRequestClose={() => !deleting && setDeleteOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: 24 }}>
+          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20 }}>
+            <Text style={{ fontFamily: "Joan", fontSize: 20, color: "#B00020", marginBottom: 8 }} accessibilityRole="header">
+              Delete your account?
+            </Text>
+            <Text style={{ fontFamily: "Manrope", fontSize: 15, color: "#333", marginBottom: 14 }}>
+              This permanently deletes your profile, programs, calendar and food log. It can't be undone.
+            </Text>
+            <TextInput
+              placeholder="Password (leave empty if you use Google/GitHub)"
+              value={deletePassword}
+              onChangeText={(v) => { setDeletePassword(v); setDeleteError(""); }}
+              secureTextEntry
+              autoCapitalize="none"
+              placeholderTextColor="#9CA3AF"
+              style={{ borderWidth: 1, borderColor: "#ddd", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10 }}
+              accessibilityLabel="Password to confirm deletion"
+            />
+            {deleteError ? (
+              <Text accessibilityLiveRegion="polite" style={{ color: "#B00020", fontFamily: "Manrope", marginBottom: 10 }}>
+                {deleteError}
+              </Text>
+            ) : null}
+            <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 12 }}>
+              <TouchableOpacity
+                onPress={() => setDeleteOpen(false)}
+                disabled={deleting}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+                style={{ paddingVertical: 10, paddingHorizontal: 14 }}
+              >
+                <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#333" }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={deleteAccount}
+                disabled={deleting}
+                accessibilityRole="button"
+                accessibilityLabel="Permanently delete my account"
+                style={{ backgroundColor: "#B00020", borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, opacity: deleting ? 0.6 : 1 }}
+              >
+                <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#fff" }}>
+                  {deleting ? "Deleting…" : "Delete forever"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

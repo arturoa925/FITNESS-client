@@ -31,3 +31,9 @@ Branch: `claude/determined-lovelace-lxs1ad`. Server-side changes and the full wr
 
 ## Update: CI
 `.github/workflows/build-check.yml` runs `npm ci` and `npx expo export --platform ios` on every push/PR: it compiles the whole app into a real Hermes bundle, catching broken imports/syntax without a simulator. (Verified locally: `npm ci` + export succeed.) Dependabot is enabled for npm and Actions.
+
+## Update: account recovery and management (client)
+- **Forgot password?** link on the password form -> `ForgotPassword` screen: email -> emailed 6-digit code -> new password -> signed in (Face ID re-enrolls automatically if this phone used it).
+- **Verify email:** `VerifyEmail` screen, reachable from the profile menu ("Verify email" shows only for unverified email/password accounts). The sign-up alert tells new users a code was emailed.
+- **Profile menu:** *Sign out of all devices* (revokes every session and Face ID device, then signs out here) and *Delete account* (confirmation dialog, password required for accounts that have one; wipes local data and returns to Welcome).
+- Requires the server's `RESEND_API_KEY` + `EMAIL_FROM` to deliver real email (otherwise codes print in the server console in dev).

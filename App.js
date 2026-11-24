@@ -15,6 +15,8 @@ import Welcome from "./screens/Phase 0/Welcome";
 import Register from "./screens/Phase 0/Register";
 import OutsideAuth from "./screens/Phase 0/OutsideAuth";
 import AuthGate from "./screens/Phase 0/AuthGate";
+import ForgotPassword from "./screens/Phase 0/ForgotPassword";
+import VerifyEmail from "./screens/Phase 0/VerifyEmail";
 
 // * phase 1 screens
 import Home from "./screens/Phase 1/Home";
@@ -68,6 +70,8 @@ export default function App() {
               <Stack.Screen name="Welcome" component={Welcome} />
               <Stack.Screen name="Register" component={Register} />
               <Stack.Screen name="OutsideAuth" component={OutsideAuth} />
+              <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
+              <Stack.Screen name="VerifyEmail" component={VerifyEmail} />
               <Stack.Screen name="Home" component={Home} />
               <Stack.Screen name="Sessions" component={Sessions} />
               <Stack.Screen name="DailyGrind" component={DailyGrind} />

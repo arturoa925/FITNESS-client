@@ -255,7 +255,7 @@ export default function Register() {
       // Show an alert and navigate on confirmation to avoid race conditions with the native Alert
       Alert.alert(
         "Welcome!",
-        "Your account has been created.",
+        "Your account has been created. We emailed you a code to verify your email; you can enter it any time from the profile menu.",
         [
           { text: "OK", onPress: goNext },
         ],
