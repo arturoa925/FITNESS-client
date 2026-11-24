@@ -184,7 +184,7 @@ export default function Home({ navigation, route }) {
       await clearSession();
       resetLocalState();
       setUser(null);
-      navigation.replace("Welcome");
+      navigation.replace("Welcome", { fromLogout: true });
     }
   };
 
