@@ -7,7 +7,9 @@ import React, {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
-import * as SecureStore from "expo-secure-store"; 
+import * as SecureStore from "expo-secure-store";
+import { resolveApiBase } from "../utils/api";
+import { onSessionExpired } from "../lib/session";
 
 const UserContext = createContext();
 
@@ -65,36 +67,6 @@ export const UserProvider = ({ children }) => {
 
     hydrate();
   }, []);
-
-  // Listen for network reconnect to sync pending ops
-  useEffect(() => {
-  const unsubscribe = NetInfo.addEventListener(async (state) => {
-    const isOnline = state.isConnected && state.isInternetReachable;
-    if (!isOnline) return;
-
-    try {
-      // you already have `user` in context
-      if (!user) return;
-
-      const baseUrl =
-        process.env.EXPO_PUBLIC_API_BASE || "http://localhost:3004";
-      const authToken =
-        (await SecureStore.getItemAsync("authToken")) ||
-        (await SecureStore.getItemAsync("accessToken")) ||
-        (await SecureStore.getItemAsync("token"));
-
-      await syncPendingOps({
-        userId: user.id,
-        authToken,
-        baseUrl,
-      });
-    } catch (e) {
-      console.error("[UserProvider] NetInfo sync error:", e);
-    }
-  });
-
-  return () => unsubscribe();
-}, [user, syncPendingOps]);
 
   const markWorkoutCompleteLocal = useCallback(
     async ({ programId, workoutKey, completedAt }) => {
@@ -613,6 +585,60 @@ export const UserProvider = ({ children }) => {
     []
   );
 
+  // Listen for network reconnect to sync pending ops
+  useEffect(() => {
+  const unsubscribe = NetInfo.addEventListener(async (state) => {
+    const isOnline = state.isConnected && state.isInternetReachable;
+    if (!isOnline) return;
+
+    try {
+      // you already have `user` in context
+      if (!user) return;
+
+      const baseUrl = resolveApiBase();
+      const authToken =
+        (await SecureStore.getItemAsync("authToken")) ||
+        (await SecureStore.getItemAsync("accessToken")) ||
+        (await SecureStore.getItemAsync("token"));
+
+      await syncPendingOps({
+        userId: user.id,
+        authToken,
+        baseUrl,
+      });
+    } catch (e) {
+      console.error("[UserProvider] NetInfo sync error:", e);
+    }
+  });
+
+  return () => unsubscribe();
+}, [user, syncPendingOps]);
+
+  // Wipe all in-memory + persisted per-account state (used on logout so the
+  // next account on this device never sees or syncs the previous user's data).
+  const resetLocalState = useCallback(async () => {
+    setUser(null);
+    setCurrentProgram(null);
+    setProgramsCache({});
+    setProgress({});
+    setPendingOps([]);
+    setFoodsByDate({});
+    try {
+      await AsyncStorage.multiRemove([
+        "currentProgramId",
+        "programsCache",
+        "progress",
+        "pendingOps",
+        "foodsByDate",
+      ]);
+    } catch (e) {
+      console.error("[UserProvider] resetLocalState failed:", e);
+    }
+  }, []);
+
+  // Server said the session is over (401): drop in-memory account state too.
+  useEffect(() => onSessionExpired(() => { resetLocalState(); }), [resetLocalState]);
+
   const value = {
     user,
     setUser,
@@ -634,6 +660,7 @@ export const UserProvider = ({ children }) => {
     markWorkoutCompleteLocal,
     completeWorkout,
     syncPendingOps,
+    resetLocalState,
     addFoodEntry,
     removeFoodEntry,
   };

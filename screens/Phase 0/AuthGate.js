@@ -5,6 +5,7 @@ import tw from "twrnc";
 import * as SecureStore from "expo-secure-store";
 import { useUser } from "../../components/UserContext";
 import { resolveApiBase } from "../../utils/api";
+import { clearSession } from "../../lib/auth";
 
 export default function AuthGate({ navigation }) {
   const { setUser } = useUser();
@@ -76,7 +77,16 @@ export default function AuthGate({ navigation }) {
               JSON.stringify(normalized)
             );
           }
-          // if !ok, just stay with cached user
+          else if (res.status === 401 || res.status === 403) {
+            // Token expired/invalid: don't open the app on a dead session.
+            await clearSession();
+            if (isMounted) {
+              setUser(null);
+              navigation.replace("Welcome");
+            }
+            return;
+          }
+          // other errors (5xx etc.): stay with cached user
         } catch (err) {
           // offline or server down → stay with cached user
         }

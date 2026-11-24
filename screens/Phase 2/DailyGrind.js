@@ -1,47 +1,23 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
-import { LinearGradient } from "expo-linear-gradient";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   Alert,
   Platform,
-  Pressable,
   useWindowDimensions,
   KeyboardAvoidingView,
   ScrollView,
   Image,
-  Animated,
-  Easing,
   PanResponder,
 } from "react-native";
 import tw from "twrnc";
-import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
-import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
-import Constants from "expo-constants";
 import * as Network from "expo-network";
 
-// Resolve API base for simulator/device (no trailing slash)
-const resolveApiBase = () => {
-  const env = process.env.EXPO_PUBLIC_API_BASE?.trim();
-  if (env) return env.replace(/\/+$/, "");
-  let host = null;
-  try {
-    const hostUri =
-      Constants?.expoConfig?.hostUri ||
-      Constants?.manifest2?.extra?.expoGo?.debuggerHost ||
-      Constants?.manifest?.debuggerHost;
-    if (hostUri) host = String(hostUri).split(":")[0];
-  } catch {}
-  if (Platform.OS === "android") {
-    return host ? `http://${host}:3004` : `http://10.0.2.2:3004`;
-  }
-  return host ? `http://${host}:3004` : `http://127.0.0.1:3004`;
-};
+import { resolveApiBase } from "../../utils/api";
 
 // Reusable exercise card
 function ExerciseCard({ exercise, maxWidth }) {

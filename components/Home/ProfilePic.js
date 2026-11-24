@@ -9,8 +9,19 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import * as LocalAuthentication from "expo-local-authentication";
+import { clearSession } from "../../lib/auth";
+import {
+  getBiometricInfo,
+  isBiometricEnrolled,
+  enrollBiometric,
+  disableBiometric,
+} from "../../lib/biometric";
+import { resolveApiBase } from "../../utils/api";
+import { useUser } from "../UserContext";
 import * as ImagePicker from "expo-image-picker";
 
 export default function ProfileAvatarMenu({
@@ -34,6 +45,19 @@ export default function ProfileAvatarMenu({
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [bioSupported, setBioSupported] = useState(false);
+  const [bioLabel, setBioLabel] = useState("Face ID");
+  const [bioEnabled, setBioEnabled] = useState(false);
+  const [bioBusy, setBioBusy] = useState(false);
+  const { resetLocalState } = useUser();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  // Local (email/password) accounts that haven't confirmed their email yet.
+  const verified = (user?.isVerified ?? user?.raw?.isVerified) === true;
+  const needsVerify = !!user?.id && (user?.provider || "local") === "local" && !verified;
   // Pick and upload new avatar image
   const handlePickAvatar = async () => {
     if (!user || !user.id) {
@@ -53,9 +77,7 @@ export default function ProfileAvatarMenu({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes:
-          (ImagePicker.MediaType && ImagePicker.MediaType.Images) ||
-          ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -97,7 +119,7 @@ export default function ProfileAvatarMenu({
         return;
       }
 
-      const url = `http://localhost:3004/users/${user.id}`;
+      const url = `${resolveApiBase()}/users/${user.id}`;
       const res = await fetch(url, {
         method: "PUT",
         headers: {
@@ -145,6 +167,115 @@ export default function ProfileAvatarMenu({
       );
     } finally {
       setAvatarUploading(false);
+    }
+  };
+
+  // Refresh Face ID status each time the menu opens.
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      const info = await getBiometricInfo();
+      const enrolled = await isBiometricEnrolled();
+      if (!alive) return;
+      setBioSupported(info.supported);
+      setBioLabel(info.label);
+      setBioEnabled(enrolled);
+    })();
+    return () => { alive = false; };
+  }, [open]);
+
+  // Ends every session and Face ID device on the server, then signs out here too.
+  const signOutEverywhere = () => {
+    setOpen(false);
+    Alert.alert(
+      "Sign out of all devices?",
+      "You'll be signed out on this phone and every other device, and Face ID will be turned off everywhere.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign out everywhere",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await SecureStore.getItemAsync("authToken");
+              await fetch(`${resolveApiBase()}/auth/logout-all`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: "{}",
+              });
+            } catch {}
+            await disableBiometric(null); // clear this phone's Face ID token too
+            await handleLogout();
+          },
+        },
+      ]
+    );
+  };
+
+  const deleteAccount = async () => {
+    if (deleting) return;
+    setDeleteError("");
+    setDeleting(true);
+    try {
+      const token = await SecureStore.getItemAsync("authToken");
+      const res = await fetch(`${resolveApiBase()}/users/${user.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ confirm: "DELETE", password: deletePassword || undefined }),
+      });
+      if (res.status === 403) {
+        setDeleteError("That password is incorrect.");
+        return;
+      }
+      if (!res.ok) {
+        setDeleteError("We couldn't delete your account. Please try again.");
+        return;
+      }
+      await disableBiometric(null);
+      // deleting an account also forgets the remembered email on this phone
+      await SecureStore.deleteItemAsync("biometricEmail").catch(() => {});
+      await SecureStore.deleteItemAsync("lastLoginEmail").catch(() => {});
+      await clearSession();
+      await resetLocalState();
+      setDeleteOpen(false);
+      setDeletePassword("");
+      Alert.alert("Account deleted", "Your account and all of its data have been permanently deleted.");
+      navigation?.replace?.("Welcome", { fromLogout: true });
+    } catch {
+      setDeleteError("Couldn't reach the server. Check your connection and try again.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleFaceId = async (next) => {
+    if (bioBusy) return;
+    setBioBusy(true);
+    try {
+      const token = await SecureStore.getItemAsync("authToken");
+      if (next) {
+        const auth = await LocalAuthentication.authenticateAsync({
+          promptMessage: `Enable ${bioLabel}`,
+          cancelLabel: "Cancel",
+        });
+        if (!auth.success) return;
+        if (!token || !(await enrollBiometric(token, bioLabel))) {
+          Alert.alert(`Couldn't enable ${bioLabel}`, "Please check your connection and try again.");
+          return;
+        }
+        if (user?.email) {
+          await SecureStore.setItemAsync("biometricEmail", String(user.email).toLowerCase());
+        }
+        setBioEnabled(true);
+      } else {
+        await disableBiometric(token); // revokes on the server and removes the local token
+        setBioEnabled(false);
+      }
+    } catch (e) {
+      Alert.alert("Something went wrong", `We couldn't update ${bioLabel}. Please try again.`);
+    } finally {
+      setBioBusy(false);
     }
   };
 
@@ -216,7 +347,7 @@ export default function ProfileAvatarMenu({
         return;
       }
 
-      const url = `http://localhost:3004/users/${user.id}`;
+      const url = `${resolveApiBase()}/users/${user.id}`;
       const res = await fetch(url, {
         method: "PUT",
         headers: {
@@ -308,7 +439,7 @@ export default function ProfileAvatarMenu({
         return;
       }
 
-      const url = `http://localhost:3004/users/${user.id}`;
+      const url = `${resolveApiBase()}/users/${user.id}`;
       const res = await fetch(url, {
         method: "PUT",
         headers: {
@@ -324,14 +455,29 @@ export default function ProfileAvatarMenu({
           res.status
         );
         Alert.alert(
-          "Update failed",
-          "We couldn't change your password. Please try again."
+          res.status === 403 ? "Current password is incorrect" : "Update failed",
+          res.status === 403
+            ? "Please re-enter your current password and try again."
+            : "We couldn't change your password. Please try again."
         );
         setSavingPassword(false);
         return;
       }
 
-      await res.json();
+      const updated = await res.json().catch(() => ({}));
+      // The server ended every other session; keep this one with the fresh tokens it sent.
+      if (updated?.session?.token) {
+        await SecureStore.setItemAsync("authToken", updated.session.token);
+        if (updated.session.refreshToken) {
+          await SecureStore.setItemAsync("refreshToken", updated.session.refreshToken);
+        }
+      }
+      const freshToken = updated?.session?.token || token;
+      // Changing a password signs out every Face ID device on the server. If it was on,
+      // re-enroll this phone now (we're signed in) so Face ID keeps working seamlessly.
+      try {
+        if (await isBiometricEnrolled()) await enrollBiometric(freshToken, bioLabel);
+      } catch {}
       setPasswordOpen(false);
       setEditPassword("");
       setCurrentPassword("");
@@ -356,9 +502,7 @@ const handleLogout = async () => {
       return onLogout();
     }
     // Fallback: clear locally and navigate
-    await SecureStore.deleteItemAsync("authToken");
-    await SecureStore.deleteItemAsync("refreshToken");
-    await SecureStore.deleteItemAsync("profilePicture");
+    await clearSession();
     navigation?.replace?.("Welcome");
   } catch (e) {
     console.error("[ProfilePic] Logout error:", e);
@@ -441,7 +585,7 @@ const handleLogout = async () => {
         >
           <View
             style={{
-              backgroundColor: "#fff", borderRadius: 12, paddingVertical: 4, minWidth: 160,
+              backgroundColor: "#fff", borderRadius: 12, paddingVertical: 4, minWidth: 220,
               shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },
               elevation: 4, borderWidth: 1, borderColor: "#eee",
             }}
@@ -456,6 +600,64 @@ const handleLogout = async () => {
               <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}>Account Settings</Text>
             </TouchableOpacity>
             <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
+            {bioSupported ? (
+              <>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingVertical: 8,
+                    paddingHorizontal: 14,
+                    gap: 12,
+                  }}
+                >
+                  <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}>
+                    Use {bioLabel}
+                  </Text>
+                  <Switch
+                    value={bioEnabled}
+                    onValueChange={toggleFaceId}
+                    disabled={bioBusy}
+                    accessibilityLabel={`Use ${bioLabel} to sign in`}
+                    accessibilityHint={`Turns ${bioLabel} sign-in on or off for this device.`}
+                  />
+                </View>
+                <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
+              </>
+            ) : null}
+            {needsVerify ? (
+              <>
+                <TouchableOpacity
+                  onPress={() => { setOpen(false); navigation?.navigate?.("VerifyEmail"); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Verify your email"
+                  style={{ paddingVertical: 12, paddingHorizontal: 14 }}
+                >
+                  <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}>Verify email</Text>
+                </TouchableOpacity>
+                <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
+              </>
+            ) : null}
+            <TouchableOpacity
+              onPress={signOutEverywhere}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out of all devices"
+              style={{ paddingVertical: 12, paddingHorizontal: 14 }}
+            >
+              <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}>Sign out of all devices</Text>
+            </TouchableOpacity>
+            <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
+            <TouchableOpacity
+              onPress={() => { setOpen(false); setDeleteError(""); setDeletePassword(""); setDeleteOpen(true); }}
+              accessibilityRole="button"
+              accessibilityLabel="Delete account"
+              accessibilityHint="Opens a confirmation to permanently delete your account."
+              style={{ paddingVertical: 12, paddingHorizontal: 14 }}
+            >
+              <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#B00020" }}>Delete account</Text>
+            </TouchableOpacity>
+            <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
             <TouchableOpacity
               onPress={handleLogout}
               accessibilityRole="button"
@@ -465,6 +667,57 @@ const handleLogout = async () => {
             >
               <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#B00020" }}>Log out</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete account confirmation */}
+      <Modal visible={deleteOpen} transparent animationType="fade" onRequestClose={() => !deleting && setDeleteOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: 24 }}>
+          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20 }}>
+            <Text style={{ fontFamily: "Joan", fontSize: 20, color: "#B00020", marginBottom: 8 }} accessibilityRole="header">
+              Delete your account?
+            </Text>
+            <Text style={{ fontFamily: "Manrope", fontSize: 15, color: "#333", marginBottom: 14 }}>
+              This permanently deletes your profile, programs, calendar and food log. It can&apos;t be undone.
+            </Text>
+            <TextInput
+              placeholder="Password (leave empty if you use Google/GitHub)"
+              value={deletePassword}
+              onChangeText={(v) => { setDeletePassword(v); setDeleteError(""); }}
+              secureTextEntry
+              autoCapitalize="none"
+              placeholderTextColor="#9CA3AF"
+              style={{ borderWidth: 1, borderColor: "#ddd", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10 }}
+              accessibilityLabel="Password to confirm deletion"
+            />
+            {deleteError ? (
+              <Text accessibilityLiveRegion="polite" style={{ color: "#B00020", fontFamily: "Manrope", marginBottom: 10 }}>
+                {deleteError}
+              </Text>
+            ) : null}
+            <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 12 }}>
+              <TouchableOpacity
+                onPress={() => setDeleteOpen(false)}
+                disabled={deleting}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+                style={{ paddingVertical: 10, paddingHorizontal: 14 }}
+              >
+                <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#333" }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={deleteAccount}
+                disabled={deleting}
+                accessibilityRole="button"
+                accessibilityLabel="Permanently delete my account"
+                style={{ backgroundColor: "#B00020", borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, opacity: deleting ? 0.6 : 1 }}
+              >
+                <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#fff" }}>
+                  {deleting ? "Deleting…" : "Delete forever"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

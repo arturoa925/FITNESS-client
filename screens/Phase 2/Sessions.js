@@ -1,11 +1,14 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
-import { PanResponder, ActivityIndicator } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 import {
+  PanResponder,
+  ActivityIndicator,
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   Alert,
   Platform,
@@ -13,16 +16,14 @@ import {
   useWindowDimensions,
   KeyboardAvoidingView,
   ScrollView,
-  Image,
   Animated,
   Easing,
 } from "react-native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 import tw from "twrnc";
-import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
-import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
 import { useUser } from "../../components/UserContext";
 import { resolveApiBase } from "../../utils/api";
 
@@ -126,10 +127,7 @@ const deriveWeekRows = (programLike, fallbackDuration) => {
 };
 
 export default function Sessions({ navigation, route }) {
-  const { user, pendingOps, syncPendingOps } =
-    useUser && typeof useUser === "function"
-      ? useUser()
-      : { user: null, pendingOps: [], syncPendingOps: undefined };
+  const { user, pendingOps, syncPendingOps } = useUser();
   const [loading, setLoading] = useState(false);
   const [noProgram, setNoProgram] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -756,7 +754,7 @@ export default function Sessions({ navigation, route }) {
                     fontWeight: "600",
                   }}
                 >
-                  Begin Today's Session
+                  Begin Today&apos;s Session
                 </Text>
               </TouchableOpacity>
             </View>

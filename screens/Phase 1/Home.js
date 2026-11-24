@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   Alert,
   Platform,
@@ -11,43 +10,17 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Image,
-  Animated,
-  Easing,
-  Modal,
 } from "react-native";
 import tw from "twrnc";
-import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
-import Svg, { Path } from "react-native-svg";
+import { clearSession } from "../../lib/auth";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Calendar } from "react-native-calendars";
-import { Picker } from "@react-native-picker/picker";
-import { TouchableWithoutFeedback } from "react-native";
-
-import { FlatList } from "react-native";
-
-// Resolve API base robustly for simulator/device (port 3004, no trailing slash)
-const resolveApiBase = () => {
-  const env = process.env.EXPO_PUBLIC_API_BASE?.trim();
-  if (env) return env.replace(/\/+$/, "");
-  const isAndroid = Platform.OS === "android";
-  // Try to derive host used by Expo dev session (optional)
-  let host = null;
-  try {
-    const Constants = require("expo-constants").default;
-    const hostUri =
-      Constants?.expoConfig?.hostUri ||
-      Constants?.manifest2?.extra?.expoGo?.debuggerHost ||
-      Constants?.manifest?.debuggerHost;
-    if (hostUri) host = String(hostUri).split(":")[0];
-  } catch {}
-  if (isAndroid) {
-    return host ? `http://${host}:3004` : `http://10.0.2.2:3004`;
-  }
-  return host ? `http://${host}:3004` : `http://127.0.0.1:3004`;
-};
+import { resolveApiBase } from "../../utils/api";
+import { useUser } from "../../components/UserContext";
+import ProfileAvatarMenu from "../../components/Home/ProfilePic";
+import ProgressBar from "../../components/Home/CurrentWeekBar";
+import CalendarFoodLog from "../../components/Home/Calendar";
 
 // Normalize weeks from different backend shapes
 const deriveWeeksFromProgram = (programLike, fallbackDuration) => {
@@ -159,12 +132,8 @@ const getProgramHeroImage = (program) => {
 };
 
 // * user context
-import { useUser } from "../../components/UserContext";
 
 // * components
-import ProfileAvatarMenu from "../../components/Home/ProfilePic";
-import ProgressBar from "../../components/Home/CurrentWeekBar";
-import CalendarFoodLog from "../../components/Home/Calendar";
 
 export default function Home({ navigation, route }) {
   const { width, height, fontScale } = useWindowDimensions();
@@ -177,37 +146,34 @@ export default function Home({ navigation, route }) {
   const iconSize = Math.max(18, Math.min(24, width * 0.06));
 
   // * user context
-  const { user, pendingOps, syncPendingOps } = useUser();
+  const { user, setUser, pendingOps, syncPendingOps, resetLocalState } = useUser();
 
   // * log out user
   const handleLogout = async () => {
     try {
-      // Get the stored token (optional)
       const token = await SecureStore.getItemAsync("authToken");
-
-      const baseURL =
-        Platform.OS === "android"
-          ? "http://10.0.2.2:3004"
-          : "http://localhost:3004";
-      const logoutUrl = `${baseURL}/users/logout`;
-
-      await fetch(logoutUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: token ? `Bearer ${token}` : "",
-        },
-      });
-
-      // Clear all auth-related data
-      await SecureStore.deleteItemAsync("authToken");
-      await SecureStore.deleteItemAsync("refreshToken");
-
-      // Navigate back to Welcome
-      navigation.replace("Welcome");
-    } catch (error) {
-      console.error("Logout error:", error);
-      Alert.alert("Error", "Unable to log out. Please try again.");
+      const refreshToken = await SecureStore.getItemAsync("refreshToken");
+      // Best effort: revoke this session's refresh token on the server.
+      // Never block logging out on a network failure.
+      if (token) {
+        try {
+          await fetch(`${resolveApiBase()}/users/logout`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ refreshToken }),
+          });
+        } catch {}
+      }
+    } finally {
+      // Wipe tokens, cached profile and every per-account offline cache,
+      // and reset in-memory state so the next user starts clean.
+      await clearSession();
+      resetLocalState();
+      setUser(null);
+      navigation.replace("Welcome", { fromLogout: true });
     }
   };
 
@@ -459,10 +425,7 @@ export default function Home({ navigation, route }) {
     async (label, slug) => {
       try {
         const token = await SecureStore.getItemAsync("authToken");
-        const baseURL =
-          Platform.OS === "android"
-            ? "http://10.0.2.2:3004"
-            : "http://localhost:3004";
+        const baseURL = resolveApiBase();
         const res = await fetch(`${baseURL}/users/training-programs`, {
           headers: {
             "Content-Type": "application/json",
@@ -628,7 +591,7 @@ export default function Home({ navigation, route }) {
                       { color: "black", fontFamily: "Joan" },
                     ]}
                   >
-                    Welcome to Today's Sweat
+                    Welcome to Today&apos;s Sweat
                   </Text>
 
                   <Text

@@ -1,5 +1,5 @@
 // client/screens/Welcome.js
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -19,17 +19,29 @@ import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
 import * as WebBrowser from "expo-web-browser";
-WebBrowser.maybeCompleteAuthSession();
-import * as Linking from "expo-linking";
 import { makeRedirectUri } from "expo-auth-session";
 import { useUser } from "../../components/UserContext";
 import { decode as atob } from "base-64";
-import { section, json, info, warn, error, success } from "../../components/logger";
+import {
+  section,
+  json,
+  info,
+  warn,
+  error,
+} from "../../components/logger";
 import { resolveApiBase } from "../../utils/api";
+import { persistSession } from "../../lib/auth";
+import {
+  biometricLogin,
+  enrollBiometric,
+  disableBiometric,
+  isBiometricEnrolled,
+  offerBiometricEnrollment,
+} from "../../lib/biometric";
+WebBrowser.maybeCompleteAuthSession();
 
-export default function Welcome({ navigation }) {
+export default function Welcome({ navigation, route }) {
   LogBox.ignoreLogs([
     "Sending `onAnimatedValueUpdate` with no listeners registered.",
   ]);
@@ -53,6 +65,9 @@ export default function Welcome({ navigation }) {
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState("Biometrics");
   const [useBiometrics, setUseBiometrics] = useState(false);
+  const [biometricEnrolled, setBiometricEnrolled] = useState(false);
+  // When this device is enrolled we lead with Face ID and hide the password form until asked.
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
 
   const { width, height, fontScale } = useWindowDimensions();
@@ -71,6 +86,7 @@ export default function Welcome({ navigation }) {
       try {
         const savedPref = await SecureStore.getItemAsync("use_biometrics");
         if (savedPref === "true") setUseBiometrics(true);
+        setBiometricEnrolled(await isBiometricEnrolled());
 
         const lastEmail = await SecureStore.getItemAsync("lastLoginEmail");
         const bioEmail = await SecureStore.getItemAsync("biometricEmail");
@@ -120,168 +136,57 @@ export default function Welcome({ navigation }) {
     return () => clearTimeout(timeout);
   }, [rateLimited]);
 
+  // Face ID sign-in. Two paths:
+  //  - a password was typed -> Face ID is just a confirmation, then the normal login runs
+  //  - nothing typed        -> unlock the stored device token (Face ID) and sign in with it
+  const faceIdFirst =
+    biometricSupported && useBiometrics && biometricEnrolled && !showPasswordForm;
+
   const handleBiometricLogin = async () => {
     if (authBusy) return;
     try {
       setAuthBusy(true);
-      section("Biometric auth: start");
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: `Authenticate with ${biometricLabel}`,
-        cancelLabel: "Cancel",
-        disableDeviceFallback: true,
-      });
-      json("Biometric auth: result", result);
-      if (!result.success) return; // user canceled/failed
 
-      // If user provided a password, reuse the regular login (skip second biometric)
       if (password) {
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: `Authenticate with ${biometricLabel}`,
+          cancelLabel: "Cancel",
+          disableDeviceFallback: true,
+        });
+        if (!result.success) return;
         await handleLogin({ skipBiometric: true });
         return;
       }
 
-      // Quick-login path: no password typed → use saved token to fetch /users/me,
-      // with offline fallback to cachedUserProfile when possible.
-      const token = await SecureStore.getItemAsync("authToken");
-      const cachedJson = await SecureStore.getItemAsync("cachedUserProfile");
-      let cachedUser = null;
-      if (cachedJson) {
-        try {
-          cachedUser = JSON.parse(cachedJson);
-        } catch (_) {
-          cachedUser = null;
-        }
-      }
-
-      if (!token && !cachedUser) {
-        Alert.alert(
-          "Sign in required",
-          "Please sign in once with your password to enable quick Face ID login."
-        );
-        return;
-      }
-
-      const baseURL = resolveApiBase();
-      let profile = null;
-      let fromServer = false;
-
-      if (token) {
-        try {
-          const me = await fetch(`${baseURL}/users/me`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (me.ok) {
-            profile = await me.json();
-            fromServer = true;
-            json("/users/me", profile);
-          } else {
-            // Treat unauthorized as a true session expiry → force manual login
-            if (me.status === 401 || me.status === 403) {
-              warn("Saved token rejected; please log in manually.", me.status);
-              Alert.alert(
-                "Session expired",
-                "Please enter your password and sign in again."
-              );
-              return;
-            }
-            // Other status codes (e.g. 500) can fall back to cached profile if available
-            warn(
-              "Biometric quick login: /users/me not OK, will consider cached profile fallback.",
-              me.status
-            );
-          }
-        } catch (err) {
-          // Network or other fetch error → allow offline fallback
-          warn("Biometric quick login: /users/me fetch error", err);
-        }
-      }
-
-      let normalized;
-
-      if (fromServer && profile) {
-        normalized = {
-          id: profile.id || profile.user?.id,
-          email: profile.email || profile.user?.email || email,
-          firstName: profile.firstName || profile.user?.firstName,
-          lastName: profile.lastName || profile.user?.lastName,
-          profilePicture:
-            profile.profilePicture || profile.user?.profilePicture,
-          provider: profile.provider || profile.user?.provider || "local",
-          raw: profile,
-        };
-        json("Biometric quick-login user (server)", normalized);
-      } else if (cachedUser && (cachedUser.id || cachedUser.email)) {
-        // Offline / server error path: fall back to cached user profile
-        normalized = {
-          id: cachedUser.id || null,
-          email: cachedUser.email || email || null,
-          firstName: cachedUser.firstName || null,
-          lastName: cachedUser.lastName || null,
-          profilePicture: cachedUser.profilePicture || null,
-          provider: cachedUser.provider || "local",
-          raw: cachedUser.raw || cachedUser,
-        };
-        json("Biometric quick-login user (cached fallback)", normalized);
-      } else {
-        // No usable server profile and no cached profile → require manual login
-        Alert.alert(
-          "Sign in required",
-          "We couldn't restore your session. Please log in with your email and password."
-        );
-        return;
-      }
-
-      setUser(normalized);
-      try {
-        await SecureStore.setItemAsync(
-          "cachedUserProfile",
-          JSON.stringify(normalized)
-        );
-        if (normalized.email) {
-          await SecureStore.setItemAsync(
-            "lastLoginEmail",
-            String(normalized.email).toLowerCase()
+      const res = await biometricLogin(biometricLabel);
+      if (!res.ok) {
+        if (res.reason === "not_enrolled") {
+          Alert.alert(
+            `Finish setting up ${biometricLabel}`,
+            `Sign in with your email and password once, and ${biometricLabel} will be ready for next time.`
           );
+        } else if (res.reason === "invalid") {
+          setBiometricEnrolled(false);
+          setShowPasswordForm(true);
+          Alert.alert(
+            `${biometricLabel} sign-in expired`,
+            "Please sign in with your password. You can turn it back on afterwards."
+          );
+        } else if (res.reason === "network") {
+          Alert.alert("Can't reach the server", "Check your connection and try again.");
         }
-      } catch (e) {
-        warn("Biometric quick login: failed to cache user profile", e);
+        // "cancelled": user dismissed Face ID, stay on the screen quietly
+        return;
       }
 
+      const normalized = await persistSession({ token: res.token, refreshToken: res.refreshToken, user: res.user });
+      setUser(normalized);
+      setRateLimited(false);
       navigation.replace("Home");
     } catch (e) {
-      error("Biometric quick login error", e);
+      error("Biometric login error", e);
     } finally {
       setAuthBusy(false);
-    }
-  };
-
-  // * toggle handler for face id
-  const toggleBiometrics = async () => {
-    if (authBusy) return;
-    section("Toggle biometrics pressed");
-    json("State", { useBiometrics, biometricSupported });
-    if (!useBiometrics) {
-      if (!biometricSupported) return;
-      try {
-        setAuthBusy(true);
-        const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: `Enable ${biometricLabel}`,
-          cancelLabel: "Cancel",
-          disableDeviceFallback: true,
-        });
-        json("Toggle biometrics: auth result", result);
-        if (result.success) {
-          setUseBiometrics(true);
-          await SecureStore.setItemAsync("use_biometrics", "true");
-        }
-        // do nothing on cancel/failure
-      } finally {
-        info("Toggle biometrics: done");
-        setAuthBusy(false);
-      }
-    } else {
-      warn("Toggle biometrics: disabling");
-      setUseBiometrics(false);
-      await SecureStore.setItemAsync("use_biometrics", "false");
     }
   };
 
@@ -290,16 +195,6 @@ export default function Welcome({ navigation }) {
     if (authBusy) return;
     try {
       setAuthBusy(true);
-
-      // Optional biometric gate if enabled (unless already completed)
-      if (useBiometrics && !skipBiometric) {
-        const res = await LocalAuthentication.authenticateAsync({
-          promptMessage: `Authenticate with ${biometricLabel}`,
-          cancelLabel: "Cancel",
-          disableDeviceFallback: true,
-        });
-        if (!res.success) return; // user canceled or failed
-      }
 
       // Normalize email (trim + lowercase) and validate inputs
       const normalizedEmail = email.trim().toLowerCase();
@@ -374,13 +269,14 @@ export default function Welcome({ navigation }) {
         data.id ||
         data.userId ||
         null;
-      json("Login extracted", { accessToken, refreshToken, userId });
+      json("Login extracted", { hasAccessToken: !!accessToken, hasRefreshToken: !!refreshToken, userId });
 
       // Persist tokens
       if (accessToken)
         await SecureStore.setItemAsync("authToken", String(accessToken));
       if (refreshToken)
         await SecureStore.setItemAsync("refreshToken", String(refreshToken));
+      if (userId) await SecureStore.setItemAsync("userId", String(userId));
 
       // Persist last email and biometric preference (normalized)
       await SecureStore.setItemAsync("lastLoginEmail", normalizedEmail);
@@ -455,6 +351,23 @@ export default function Welcome({ navigation }) {
         }
       }
 
+      // Face ID: first password sign-in on this device (or a different account) -> enroll.
+      // Already opted in (toggle on) enrolls silently; otherwise ask once.
+      try {
+        const alreadyForThisAccount =
+          biometricEnrolled && biometricEmail && biometricEmail === normalizedEmail;
+        if (biometricSupported && accessToken && !alreadyForThisAccount) {
+          const wants = useBiometrics || (await offerBiometricEnrollment(biometricLabel));
+          if (wants && (await enrollBiometric(accessToken, biometricLabel))) {
+            await SecureStore.setItemAsync("biometricEmail", normalizedEmail);
+            setUseBiometrics(true);
+            setBiometricEnrolled(true);
+          }
+        }
+      } catch (e) {
+        warn("Face ID enrollment skipped", e);
+      }
+
       // Navigate to Home once context is populated
       setRateLimited(false);
       navigation.replace("Home");
@@ -469,34 +382,43 @@ export default function Welcome({ navigation }) {
     }
   };
 
-  // Disable auto Face ID prompt on screen focus to avoid being stuck at launch.
-  // Users can still tap the Face ID button or the checkbox to authenticate.
-  const autoPromptOnLaunch = useRef(false); // set to true later if you want auto-prompt behavior
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!autoPromptOnLaunch.current) return; // no auto prompt by default
-      let cancelled = false;
-      (async () => {
-        if (cancelled) return;
-        if (useBiometrics && biometricSupported && !authBusy && email) {
-          try {
-            await handleBiometricLogin();
-          } catch {}
+  // After a Google/GitHub sign-in, offer to enable Face ID for next time.
+  const offerFaceIdAfterSocial = async (token, emailForBio) => {
+    try {
+      if (!token || !biometricSupported || biometricEnrolled) return;
+      if (!(await offerBiometricEnrollment(biometricLabel))) return;
+      if (await enrollBiometric(token, biometricLabel)) {
+        if (emailForBio) {
+          await SecureStore.setItemAsync("biometricEmail", String(emailForBio).toLowerCase());
         }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [useBiometrics, biometricSupported, authBusy, email])
-  );
+        setBiometricEnrolled(true);
+        setUseBiometrics(true);
+      }
+    } catch (e) {
+      warn("Face ID offer after social sign-in skipped", e);
+    }
+  };
+
+  // Auto-prompt Face ID once per visit when this device is enrolled. Skipped right after
+  // an explicit logout (so logging out doesn't instantly log you back in). If the prompt is
+  // cancelled the user simply stays here and can type a password. Set to false to disable.
+  const AUTO_PROMPT_BIOMETRIC = true;
+  const autoPrompted = useRef(false);
+
+  useEffect(() => {
+    if (!AUTO_PROMPT_BIOMETRIC || autoPrompted.current) return;
+    if (route?.params?.fromLogout) return;
+    if (!biometricSupported || !useBiometrics || !biometricEnrolled || authBusy) return;
+    autoPrompted.current = true;
+    handleBiometricLogin();
+  }, [biometricSupported, useBiometrics, biometricEnrolled]);
 
   // GitHub system-auth handler
   const handleGithubSignIn = async () => {
     try {
       const baseURL = resolveApiBase();
-      // Use Expo AuthSession proxy so this works in Expo Go
-      const redirectUri = makeRedirectUri({ useProxy: true });
+      // Expo Go -> exp://..., dev/standalone builds -> arturofit://oauth-complete
+      const redirectUri = makeRedirectUri({ scheme: "arturofit", path: "oauth-complete" });
       const authUrl = `${baseURL}/auth/github?mode=minimal&state=mobile&redirect_uri=${encodeURIComponent(
         redirectUri
       )}`;
@@ -514,6 +436,7 @@ export default function Welcome({ navigation }) {
         const hash = result.url.split("#")[1] || "";
         const params = new URLSearchParams(hash);
         const token = params.get("token");
+        const refreshTokenParam = params.get("refreshToken");
         const emailParam = params.get("email");
         const nameParam = params.get("name");
         const photo = params.get("photo");
@@ -543,7 +466,7 @@ export default function Welcome({ navigation }) {
         }
 
         json("GitHub parsed", {
-          token,
+          hasToken: !!token,
           email: emailParam,
           name: nameParam,
           photo: normalizedPhoto,
@@ -601,6 +524,7 @@ export default function Welcome({ navigation }) {
           try {
             if (token) {
               await SecureStore.setItemAsync("authToken", String(token));
+              if (refreshTokenParam) await SecureStore.setItemAsync("refreshToken", String(refreshTokenParam));
             }
             await SecureStore.setItemAsync(
               "cachedUserProfile",
@@ -611,6 +535,7 @@ export default function Welcome({ navigation }) {
           }
         } catch (_) {}
 
+        await offerFaceIdAfterSocial(token, emailParam);
         navigation.replace("OutsideAuth", {
           token,
           email: emailParam,
@@ -634,8 +559,8 @@ export default function Welcome({ navigation }) {
   const handleGoogleSignIn = async () => {
     try {
       const baseURL = resolveApiBase();
-      // Use Expo AuthSession proxy so this works in Expo Go
-      const redirectUri = makeRedirectUri({ useProxy: true });
+      // Expo Go -> exp://..., dev/standalone builds -> arturofit://oauth-complete
+      const redirectUri = makeRedirectUri({ scheme: "arturofit", path: "oauth-complete" });
       const authUrl = `${baseURL}/auth/google?mode=minimal&state=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
       section("Google auth session");
       json("Start", { authUrl, redirectUri });
@@ -650,6 +575,7 @@ export default function Welcome({ navigation }) {
         const hash = result.url.split("#")[1] || "";
         const params = new URLSearchParams(hash);
         const token = params.get("token");
+        const refreshTokenParam = params.get("refreshToken");
         const emailParam = params.get("email");
         const nameParam = params.get("name");
         const photo = params.get("photo");
@@ -677,7 +603,7 @@ export default function Welcome({ navigation }) {
           }
         }
 
-        json("Google parsed", { token, email: emailParam, name: nameParam, photo: normalizedPhoto, userId: userIdParam, providerId: providerIdParam });
+        json("Google parsed", { hasToken: !!token, email: emailParam, name: nameParam, photo: normalizedPhoto, userId: userIdParam, providerId: providerIdParam });
 
         // Persist avatar so ProfilePic can load it even if props are missing
         try {
@@ -716,6 +642,7 @@ export default function Welcome({ navigation }) {
           try {
             if (token) {
               await SecureStore.setItemAsync("authToken", String(token));
+              if (refreshTokenParam) await SecureStore.setItemAsync("refreshToken", String(refreshTokenParam));
             }
             await SecureStore.setItemAsync(
               "cachedUserProfile",
@@ -726,6 +653,7 @@ export default function Welcome({ navigation }) {
           }
         } catch (_) {}
 
+        await offerFaceIdAfterSocial(token, emailParam);
         navigation.replace("OutsideAuth", {
           token,
           email: emailParam,
@@ -771,6 +699,18 @@ export default function Welcome({ navigation }) {
                 Welcome to Fitness
               </Text>
 
+              {route?.params?.sessionExpired ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[
+                    tw`text-center mt-2`,
+                    { color: "#FDE68A", fontFamily: "Manrope", fontSize: bodySize },
+                  ]}
+                >
+                  Your session expired. Please sign in again.
+                </Text>
+              ) : null}
+
               {/* Subheads */}
               <Text
                 style={[
@@ -778,7 +718,7 @@ export default function Welcome({ navigation }) {
                   { color: "white", fontFamily: "Manrope", fontSize: h2Size },
                 ]}
               >
-                Let's Get Moving
+                {faceIdFirst ? "Welcome back" : "Let's Get Moving"}
               </Text>
               <Text
                 style={[
@@ -791,10 +731,58 @@ export default function Welcome({ navigation }) {
                   },
                 ]}
               >
-                Log in to access your workouts and track every rep, set, and
-                sweat!
+                {faceIdFirst
+                  ? email || "Sign in to pick up where you left off."
+                  : "Log in to access your workouts and track every rep, set, and sweat!"}
               </Text>
 
+              {/* Face ID first: shown when this device is enrolled */}
+              {faceIdFirst ? (
+                <View style={{ width: maxWidth, alignSelf: "center" }}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      tw`rounded-xl py-4`,
+                      {
+                        backgroundColor: authBusy ? "#9bd2b1" : pressed ? "#9bd2b1" : "#BEE3C6",
+                        opacity: authBusy ? 0.8 : 1,
+                      },
+                    ]}
+                    onPress={handleBiometricLogin}
+                    disabled={authBusy}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Sign in with ${biometricLabel}`}
+                    accessibilityHint={`Authenticate using ${biometricLabel} to sign in.`}
+                  >
+                    <Text
+                      style={[
+                        tw`text-black text-center font-semibold text-xl`,
+                        { fontFamily: "Manrope" },
+                      ]}
+                    >
+                      {authBusy ? "Signing in…" : `Sign in with ${biometricLabel}`}
+                    </Text>
+                  </Pressable>
+                  <TouchableOpacity
+                    onPress={() => setShowPasswordForm(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Use password instead"
+                    style={tw`mt-4 py-2`}
+                  >
+                    <Text
+                      style={{
+                        color: "white",
+                        textAlign: "center",
+                        textDecorationLine: "underline",
+                        fontFamily: "Manrope",
+                        fontSize: bodySize,
+                      }}
+                    >
+                      Use password or a different account
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
               {/* input fields */}
               <View style={tw`w-full mt-6`}>
                 <TextInput
@@ -862,71 +850,25 @@ export default function Welcome({ navigation }) {
                     {passwordError}
                   </Text>
                 ) : null}
-              </View>
-
-              {/* face id section */}
-              <TouchableOpacity
-                onPress={toggleBiometrics}
-                activeOpacity={0.8}
-                accessibilityRole="checkbox"
-                accessibilityLabel={`Use ${biometricLabel} to login`}
-                accessibilityHint={
-                  biometricSupported
-                    ? `Double tap to ${useBiometrics ? "disable" : "enable"} ${biometricLabel} for faster login.`
-                    : `${biometricLabel} is not available on this device.`
-                }
-                accessibilityState={{
-                  checked: useBiometrics,
-                  disabled: !biometricSupported,
-                }}
-                disabled={!biometricSupported || authBusy}
-                style={[
-                  {
-                    width: maxWidth,
-                    alignSelf: "center",
-                    paddingHorizontal: isShort ? 16 : 24,
-                  },
-                  tw`flex-row items-center justify-between mt-2 mb-4`,
-                ]}
-              >
-                <Text style={tw`text-base text-gray-900 text-lg`}>
-                  Use {biometricLabel} to login
-                </Text>
-                {/* face id checkbox */}
-                <View
-                  style={tw`w-6 h-6 rounded-md border bg-white items-center justify-center`}
-                >
-                  {useBiometrics ? <Text style={tw`text-black`}>✓</Text> : null}
-                </View>
-              </TouchableOpacity>
-
-              {/* biometric login button (conditional) */}
-              {biometricSupported && useBiometrics ? (
-                <Pressable
-                  style={({ pressed }) => [
-                    tw`rounded-xl py-3`,
-                    {
-                      width: maxWidth,
-                      alignSelf: "center",
-                      backgroundColor: pressed ? "#9bd2b1" : "#BEE3C6",
-                    },
-                  ]}
-                  onPress={handleBiometricLogin}
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("ForgotPassword", { email: email.trim() })}
                   accessibilityRole="button"
-                  accessibilityLabel={`Login with ${biometricLabel}`}
-                  accessibilityHint={`Authenticate using ${biometricLabel} instead of typing your password.`}
-                  disabled={authBusy}
+                  accessibilityLabel="Forgot password"
+                  accessibilityHint="Emails you a code to reset your password."
+                  style={tw`self-end py-1 mb-2`}
                 >
                   <Text
-                    style={[
-                      tw`text-black text-center font-semibold text-xl`,
-                      { fontFamily: "Manrope" },
-                    ]}
+                    style={{
+                      color: "white",
+                      textDecorationLine: "underline",
+                      fontFamily: "Manrope",
+                      fontSize: bodySize - 1,
+                    }}
                   >
-                    Login with {biometricLabel}
+                    Forgot password?
                   </Text>
-                </Pressable>
-              ) : null}
+                </TouchableOpacity>
+              </View>
 
               {/* primary login button */}
               <Pressable
@@ -958,6 +900,30 @@ export default function Welcome({ navigation }) {
                   {authBusy ? "Logging in…" : "Log In"}
                 </Text>
               </Pressable>
+
+                  {/* way back to Face ID when this device is enrolled */}
+                  {biometricSupported && useBiometrics && biometricEnrolled ? (
+                    <TouchableOpacity
+                      onPress={() => setShowPasswordForm(false)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Use ${biometricLabel} instead`}
+                      style={tw`mt-4 py-2`}
+                    >
+                      <Text
+                        style={{
+                          color: "white",
+                          textAlign: "center",
+                          textDecorationLine: "underline",
+                          fontFamily: "Manrope",
+                          fontSize: bodySize,
+                        }}
+                      >
+                        Use {biometricLabel} instead
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </>
+              )}
 
               {rateLimited && (
                 <Text

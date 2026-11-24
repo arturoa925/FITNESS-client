@@ -13,8 +13,8 @@ import {
   ScrollView,
   Image,
   Linking,
+  PanResponder,
 } from "react-native";
-import { PanResponder } from "react-native";
 import tw from "twrnc";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
@@ -23,6 +23,9 @@ import Svg, { Path } from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { resolveApiBase } from "../../utils/api";
+import { persistSession } from "../../lib/auth";
+import { enrollBiometric } from "../../lib/biometric";
+import { useUser } from "../../components/UserContext";
 import { useNavigation } from "@react-navigation/native";
 
 export default function Register() {
@@ -38,6 +41,7 @@ export default function Register() {
   const profileIconSize = Math.max(50, Math.min(80, width * 0.28));
 
   const navigation = useNavigation();
+  const { setUser } = useUser();
 
   // * name fields states
   const [firstName, setFirstName] = useState("");
@@ -210,11 +214,21 @@ export default function Register() {
         await SecureStore.setItemAsync("authToken", token);
       }
 
-      // Persist Face ID preference & email if user opted in
+      // Sign the new user in fully (userId, cached profile, context) so Home has everything.
       try {
-        if (useBiometrics) {
-          await SecureStore.setItemAsync("use_biometrics", "true");
-          await SecureStore.setItemAsync("biometricEmail", normalizedEmail);
+        if (token && data.user) {
+          setUser(await persistSession({ token, refreshToken: data.refreshToken, user: data.user }));
+        }
+      } catch (e) {
+        console.warn("[Register] could not persist session:", e?.message);
+      }
+
+      // New account + Face ID opted in: enroll this device right away (token is fresh).
+      try {
+        if (token && useBiometrics && biometricSupported) {
+          if (await enrollBiometric(token, biometricLabel)) {
+            await SecureStore.setItemAsync("biometricEmail", normalizedEmail);
+          }
         }
       } catch {}
 
@@ -241,7 +255,7 @@ export default function Register() {
       // Show an alert and navigate on confirmation to avoid race conditions with the native Alert
       Alert.alert(
         "Welcome!",
-        "Your account has been created.",
+        "Your account has been created. We emailed you a code to verify your email; you can enter it any time from the profile menu.",
         [
           { text: "OK", onPress: goNext },
         ],
@@ -285,17 +299,13 @@ export default function Register() {
         return;
       }
 
-      // Use the new API when available; otherwise, omit mediaTypes to use the default (Images)
-      const hasNewEnum = !!ImagePicker.MediaType && !!ImagePicker.MediaType.Images;
       const options = {
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.9,
         selectionLimit: 1,
       };
-      if (hasNewEnum) {
-        options.mediaTypes = [ImagePicker.MediaType.Images];
-      }
 
       const result = await ImagePicker.launchImageLibraryAsync(options);
 
