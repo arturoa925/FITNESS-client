@@ -35,5 +35,6 @@
 ## Profile menu
 Tap your avatar → **Use Face ID** switch (only shown when the phone supports it). On = Face ID prompt then enroll; Off = revokes this phone on the server and removes the local token. Changing your password re-enrolls this phone automatically so Face ID keeps working.
 
-## Known gaps
-- The **Apple** and **LinkedIn** buttons on the sign-in screen have no handler (they do nothing). Note: App Store guideline 4.8 requires Sign in with Apple when an app offers other third-party sign-in such as Google/GitHub.
+## Placeholder buttons
+The **Apple** and **LinkedIn** buttons on the sign-in screen are intentional placeholders (no handler). Working sign-in methods are email/password, Google and GitHub, each with Face ID on top.
+Heads-up for App Store submission only: guideline 4.8 requires Sign in with Apple when an app offers other third-party sign-in, so the Apple button would need to become real (or the Google/GitHub buttons removed) before release.
