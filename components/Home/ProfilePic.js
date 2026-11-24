@@ -9,9 +9,17 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import * as LocalAuthentication from "expo-local-authentication";
 import { clearSession } from "../../lib/auth";
+import {
+  getBiometricInfo,
+  isBiometricEnrolled,
+  enrollBiometric,
+  disableBiometric,
+} from "../../lib/biometric";
 import { resolveApiBase } from "../../utils/api";
 import * as ImagePicker from "expo-image-picker";
 
@@ -36,6 +44,10 @@ export default function ProfileAvatarMenu({
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [bioSupported, setBioSupported] = useState(false);
+  const [bioLabel, setBioLabel] = useState("Face ID");
+  const [bioEnabled, setBioEnabled] = useState(false);
+  const [bioBusy, setBioBusy] = useState(false);
   // Pick and upload new avatar image
   const handlePickAvatar = async () => {
     if (!user || !user.id) {
@@ -147,6 +159,51 @@ export default function ProfileAvatarMenu({
       );
     } finally {
       setAvatarUploading(false);
+    }
+  };
+
+  // Refresh Face ID status each time the menu opens.
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      const info = await getBiometricInfo();
+      const enrolled = await isBiometricEnrolled();
+      if (!alive) return;
+      setBioSupported(info.supported);
+      setBioLabel(info.label);
+      setBioEnabled(enrolled);
+    })();
+    return () => { alive = false; };
+  }, [open]);
+
+  const toggleFaceId = async (next) => {
+    if (bioBusy) return;
+    setBioBusy(true);
+    try {
+      const token = await SecureStore.getItemAsync("authToken");
+      if (next) {
+        const auth = await LocalAuthentication.authenticateAsync({
+          promptMessage: `Enable ${bioLabel}`,
+          cancelLabel: "Cancel",
+        });
+        if (!auth.success) return;
+        if (!token || !(await enrollBiometric(token, bioLabel))) {
+          Alert.alert(`Couldn't enable ${bioLabel}`, "Please check your connection and try again.");
+          return;
+        }
+        if (user?.email) {
+          await SecureStore.setItemAsync("biometricEmail", String(user.email).toLowerCase());
+        }
+        setBioEnabled(true);
+      } else {
+        await disableBiometric(token); // revokes on the server and removes the local token
+        setBioEnabled(false);
+      }
+    } catch (e) {
+      Alert.alert("Something went wrong", `We couldn't update ${bioLabel}. Please try again.`);
+    } finally {
+      setBioBusy(false);
     }
   };
 
@@ -326,14 +383,21 @@ export default function ProfileAvatarMenu({
           res.status
         );
         Alert.alert(
-          "Update failed",
-          "We couldn't change your password. Please try again."
+          res.status === 403 ? "Current password is incorrect" : "Update failed",
+          res.status === 403
+            ? "Please re-enter your current password and try again."
+            : "We couldn't change your password. Please try again."
         );
         setSavingPassword(false);
         return;
       }
 
       await res.json();
+      // Changing a password signs out every Face ID device on the server. If it was on,
+      // re-enroll this phone now (we're signed in) so Face ID keeps working seamlessly.
+      try {
+        if (await isBiometricEnrolled()) await enrollBiometric(token, bioLabel);
+      } catch {}
       setPasswordOpen(false);
       setEditPassword("");
       setCurrentPassword("");
@@ -441,7 +505,7 @@ const handleLogout = async () => {
         >
           <View
             style={{
-              backgroundColor: "#fff", borderRadius: 12, paddingVertical: 4, minWidth: 160,
+              backgroundColor: "#fff", borderRadius: 12, paddingVertical: 4, minWidth: 220,
               shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },
               elevation: 4, borderWidth: 1, borderColor: "#eee",
             }}
@@ -456,6 +520,32 @@ const handleLogout = async () => {
               <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}>Account Settings</Text>
             </TouchableOpacity>
             <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
+            {bioSupported ? (
+              <>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingVertical: 8,
+                    paddingHorizontal: 14,
+                    gap: 12,
+                  }}
+                >
+                  <Text style={{ fontFamily: "Joan", fontSize: 16, color: "#060000" }}>
+                    Use {bioLabel}
+                  </Text>
+                  <Switch
+                    value={bioEnabled}
+                    onValueChange={toggleFaceId}
+                    disabled={bioBusy}
+                    accessibilityLabel={`Use ${bioLabel} to sign in`}
+                    accessibilityHint={`Turns ${bioLabel} sign-in on or off for this device.`}
+                  />
+                </View>
+                <View style={{ height: 1, backgroundColor: "#eee", marginHorizontal: 8 }} />
+              </>
+            ) : null}
             <TouchableOpacity
               onPress={handleLogout}
               accessibilityRole="button"

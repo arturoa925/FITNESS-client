@@ -62,6 +62,8 @@ export default function Welcome({ navigation, route }) {
   const [biometricLabel, setBiometricLabel] = useState("Biometrics");
   const [useBiometrics, setUseBiometrics] = useState(false);
   const [biometricEnrolled, setBiometricEnrolled] = useState(false);
+  // When this device is enrolled we lead with Face ID and hide the password form until asked.
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
 
   const { width, height, fontScale } = useWindowDimensions();
@@ -133,6 +135,9 @@ export default function Welcome({ navigation, route }) {
   // Face ID sign-in. Two paths:
   //  - a password was typed -> Face ID is just a confirmation, then the normal login runs
   //  - nothing typed        -> unlock the stored device token (Face ID) and sign in with it
+  const faceIdFirst =
+    biometricSupported && useBiometrics && biometricEnrolled && !showPasswordForm;
+
   const handleBiometricLogin = async () => {
     if (authBusy) return;
     try {
@@ -158,6 +163,7 @@ export default function Welcome({ navigation, route }) {
           );
         } else if (res.reason === "invalid") {
           setBiometricEnrolled(false);
+          setShowPasswordForm(true);
           Alert.alert(
             `${biometricLabel} sign-in expired`,
             "Please sign in with your password. You can turn it back on afterwards."
@@ -404,6 +410,23 @@ export default function Welcome({ navigation, route }) {
     }
   };
 
+  // After a Google/GitHub sign-in, offer to enable Face ID for next time.
+  const offerFaceIdAfterSocial = async (token, emailForBio) => {
+    try {
+      if (!token || !biometricSupported || biometricEnrolled) return;
+      if (!(await offerBiometricEnrollment(biometricLabel))) return;
+      if (await enrollBiometric(token, biometricLabel)) {
+        if (emailForBio) {
+          await SecureStore.setItemAsync("biometricEmail", String(emailForBio).toLowerCase());
+        }
+        setBiometricEnrolled(true);
+        setUseBiometrics(true);
+      }
+    } catch (e) {
+      warn("Face ID offer after social sign-in skipped", e);
+    }
+  };
+
   // Auto-prompt Face ID once per visit when this device is enrolled. Skipped right after
   // an explicit logout (so logging out doesn't instantly log you back in). If the prompt is
   // cancelled the user simply stays here and can type a password. Set to false to disable.
@@ -538,6 +561,7 @@ export default function Welcome({ navigation, route }) {
           }
         } catch (_) {}
 
+        await offerFaceIdAfterSocial(token, emailParam);
         navigation.replace("OutsideAuth", {
           token,
           email: emailParam,
@@ -653,6 +677,7 @@ export default function Welcome({ navigation, route }) {
           }
         } catch (_) {}
 
+        await offerFaceIdAfterSocial(token, emailParam);
         navigation.replace("OutsideAuth", {
           token,
           email: emailParam,
@@ -705,7 +730,7 @@ export default function Welcome({ navigation, route }) {
                   { color: "white", fontFamily: "Manrope", fontSize: h2Size },
                 ]}
               >
-                Let's Get Moving
+                {faceIdFirst ? "Welcome back" : "Let's Get Moving"}
               </Text>
               <Text
                 style={[
@@ -718,10 +743,58 @@ export default function Welcome({ navigation, route }) {
                   },
                 ]}
               >
-                Log in to access your workouts and track every rep, set, and
-                sweat!
+                {faceIdFirst
+                  ? email || "Sign in to pick up where you left off."
+                  : "Log in to access your workouts and track every rep, set, and sweat!"}
               </Text>
 
+              {/* Face ID first: shown when this device is enrolled */}
+              {faceIdFirst ? (
+                <View style={{ width: maxWidth, alignSelf: "center" }}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      tw`rounded-xl py-4`,
+                      {
+                        backgroundColor: authBusy ? "#9bd2b1" : pressed ? "#9bd2b1" : "#BEE3C6",
+                        opacity: authBusy ? 0.8 : 1,
+                      },
+                    ]}
+                    onPress={handleBiometricLogin}
+                    disabled={authBusy}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Sign in with ${biometricLabel}`}
+                    accessibilityHint={`Authenticate using ${biometricLabel} to sign in.`}
+                  >
+                    <Text
+                      style={[
+                        tw`text-black text-center font-semibold text-xl`,
+                        { fontFamily: "Manrope" },
+                      ]}
+                    >
+                      {authBusy ? "Signing in…" : `Sign in with ${biometricLabel}`}
+                    </Text>
+                  </Pressable>
+                  <TouchableOpacity
+                    onPress={() => setShowPasswordForm(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Use password instead"
+                    style={tw`mt-4 py-2`}
+                  >
+                    <Text
+                      style={{
+                        color: "white",
+                        textAlign: "center",
+                        textDecorationLine: "underline",
+                        fontFamily: "Manrope",
+                        fontSize: bodySize,
+                      }}
+                    >
+                      Use password or a different account
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
               {/* input fields */}
               <View style={tw`w-full mt-6`}>
                 <TextInput
@@ -791,70 +864,6 @@ export default function Welcome({ navigation, route }) {
                 ) : null}
               </View>
 
-              {/* face id section */}
-              <TouchableOpacity
-                onPress={toggleBiometrics}
-                activeOpacity={0.8}
-                accessibilityRole="checkbox"
-                accessibilityLabel={`Use ${biometricLabel} to login`}
-                accessibilityHint={
-                  biometricSupported
-                    ? `Double tap to ${useBiometrics ? "disable" : "enable"} ${biometricLabel} for faster login.`
-                    : `${biometricLabel} is not available on this device.`
-                }
-                accessibilityState={{
-                  checked: useBiometrics,
-                  disabled: !biometricSupported,
-                }}
-                disabled={!biometricSupported || authBusy}
-                style={[
-                  {
-                    width: maxWidth,
-                    alignSelf: "center",
-                    paddingHorizontal: isShort ? 16 : 24,
-                  },
-                  tw`flex-row items-center justify-between mt-2 mb-4`,
-                ]}
-              >
-                <Text style={tw`text-base text-gray-900 text-lg`}>
-                  Use {biometricLabel} to login
-                </Text>
-                {/* face id checkbox */}
-                <View
-                  style={tw`w-6 h-6 rounded-md border bg-white items-center justify-center`}
-                >
-                  {useBiometrics ? <Text style={tw`text-black`}>✓</Text> : null}
-                </View>
-              </TouchableOpacity>
-
-              {/* biometric login button (conditional) */}
-              {biometricSupported && useBiometrics ? (
-                <Pressable
-                  style={({ pressed }) => [
-                    tw`rounded-xl py-3`,
-                    {
-                      width: maxWidth,
-                      alignSelf: "center",
-                      backgroundColor: pressed ? "#9bd2b1" : "#BEE3C6",
-                    },
-                  ]}
-                  onPress={handleBiometricLogin}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Login with ${biometricLabel}`}
-                  accessibilityHint={`Authenticate using ${biometricLabel} instead of typing your password.`}
-                  disabled={authBusy}
-                >
-                  <Text
-                    style={[
-                      tw`text-black text-center font-semibold text-xl`,
-                      { fontFamily: "Manrope" },
-                    ]}
-                  >
-                    Login with {biometricLabel}
-                  </Text>
-                </Pressable>
-              ) : null}
-
               {/* primary login button */}
               <Pressable
                 style={({ pressed }) => [
@@ -885,6 +894,30 @@ export default function Welcome({ navigation, route }) {
                   {authBusy ? "Logging in…" : "Log In"}
                 </Text>
               </Pressable>
+
+                  {/* way back to Face ID when this device is enrolled */}
+                  {biometricSupported && useBiometrics && biometricEnrolled ? (
+                    <TouchableOpacity
+                      onPress={() => setShowPasswordForm(false)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Use ${biometricLabel} instead`}
+                      style={tw`mt-4 py-2`}
+                    >
+                      <Text
+                        style={{
+                          color: "white",
+                          textAlign: "center",
+                          textDecorationLine: "underline",
+                          fontFamily: "Manrope",
+                          fontSize: bodySize,
+                        }}
+                      >
+                        Use {biometricLabel} instead
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </>
+              )}
 
               {rateLimited && (
                 <Text

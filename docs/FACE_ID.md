@@ -27,6 +27,13 @@
 - Auto-prompt can be turned off with `AUTO_PROMPT_BIOMETRIC = false` in `Welcome.js`.
 - Deploy the server first. The new `BiometricDevices` table is created automatically by `sequelize.sync()` on boot.
 
-## Not covered yet
-- Offering Face ID after Google/GitHub sign-in (only password and new-account paths enroll).
-- A "Disable Face ID" switch inside the profile screen while signed in (`disableBiometric(jwt)` exists and revokes server-side; it just isn't wired to a button).
+## Sign-in screen behaviour
+- **Enrolled device:** Welcome shows "Welcome back", the saved email and one big **Sign in with Face ID** button. The password form is hidden behind "Use password or a different account" (and "Use Face ID instead" brings it back). If Face ID can no longer be used (password changed elsewhere, token expired) the password form appears automatically with an explanation.
+- **Not enrolled:** the normal email/password form. After the first successful sign-in (password, Google or GitHub) the app offers to enable Face ID once.
+- The old "Use Face ID to login" checkbox on the sign-in screen was removed: enabling now happens at the offer prompt, at registration, or in the profile menu.
+
+## Profile menu
+Tap your avatar → **Use Face ID** switch (only shown when the phone supports it). On = Face ID prompt then enroll; Off = revokes this phone on the server and removes the local token. Changing your password re-enrolls this phone automatically so Face ID keeps working.
+
+## Known gaps
+- The **Apple** and **LinkedIn** buttons on the sign-in screen have no handler (they do nothing). Note: App Store guideline 4.8 requires Sign in with Apple when an app offers other third-party sign-in such as Google/GitHub.
