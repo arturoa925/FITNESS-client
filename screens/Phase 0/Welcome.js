@@ -374,7 +374,7 @@ export default function Welcome({ navigation }) {
         data.id ||
         data.userId ||
         null;
-      json("Login extracted", { accessToken, refreshToken, userId });
+      json("Login extracted", { hasAccessToken: !!accessToken, hasRefreshToken: !!refreshToken, userId });
 
       // Persist tokens
       if (accessToken)
@@ -495,8 +495,8 @@ export default function Welcome({ navigation }) {
   const handleGithubSignIn = async () => {
     try {
       const baseURL = resolveApiBase();
-      // Use Expo AuthSession proxy so this works in Expo Go
-      const redirectUri = makeRedirectUri({ useProxy: true });
+      // Expo Go -> exp://..., dev/standalone builds -> arturofit://oauth-complete
+      const redirectUri = makeRedirectUri({ scheme: "arturofit", path: "oauth-complete" });
       const authUrl = `${baseURL}/auth/github?mode=minimal&state=mobile&redirect_uri=${encodeURIComponent(
         redirectUri
       )}`;
@@ -543,7 +543,7 @@ export default function Welcome({ navigation }) {
         }
 
         json("GitHub parsed", {
-          token,
+          hasToken: !!token,
           email: emailParam,
           name: nameParam,
           photo: normalizedPhoto,
@@ -634,8 +634,8 @@ export default function Welcome({ navigation }) {
   const handleGoogleSignIn = async () => {
     try {
       const baseURL = resolveApiBase();
-      // Use Expo AuthSession proxy so this works in Expo Go
-      const redirectUri = makeRedirectUri({ useProxy: true });
+      // Expo Go -> exp://..., dev/standalone builds -> arturofit://oauth-complete
+      const redirectUri = makeRedirectUri({ scheme: "arturofit", path: "oauth-complete" });
       const authUrl = `${baseURL}/auth/google?mode=minimal&state=mobile&redirect_uri=${encodeURIComponent(redirectUri)}`;
       section("Google auth session");
       json("Start", { authUrl, redirectUri });
@@ -677,7 +677,7 @@ export default function Welcome({ navigation }) {
           }
         }
 
-        json("Google parsed", { token, email: emailParam, name: nameParam, photo: normalizedPhoto, userId: userIdParam, providerId: providerIdParam });
+        json("Google parsed", { hasToken: !!token, email: emailParam, name: nameParam, photo: normalizedPhoto, userId: userIdParam, providerId: providerIdParam });
 
         // Persist avatar so ProfilePic can load it even if props are missing
         try {

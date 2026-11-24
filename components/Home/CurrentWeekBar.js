@@ -4,6 +4,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 
 import * as SecureStore from "expo-secure-store";
+import { resolveApiBase } from "../../utils/api";
 
 // A day counts as completed if it is explicitly marked completed/done OR
 // if all of its workouts (when present) are completed.
@@ -91,7 +92,7 @@ export default function ProgressBar({ width = 300 }) {
         return;
       }
       const token = await SecureStore.getItemAsync("authToken");
-      const baseURL = Platform.OS === "android" ? "http://10.0.2.2:3004" : "http://localhost:3004";
+      const baseURL = resolveApiBase();
       const res = await fetch(`${baseURL}/users/${storedId}/training-programs`, {
         headers: {
           "Content-Type": "application/json",

@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import { clearSession } from "../../lib/auth";
+import { resolveApiBase } from "../../utils/api";
 import * as ImagePicker from "expo-image-picker";
 
 export default function ProfileAvatarMenu({
@@ -97,7 +99,7 @@ export default function ProfileAvatarMenu({
         return;
       }
 
-      const url = `http://localhost:3004/users/${user.id}`;
+      const url = `${resolveApiBase()}/users/${user.id}`;
       const res = await fetch(url, {
         method: "PUT",
         headers: {
@@ -216,7 +218,7 @@ export default function ProfileAvatarMenu({
         return;
       }
 
-      const url = `http://localhost:3004/users/${user.id}`;
+      const url = `${resolveApiBase()}/users/${user.id}`;
       const res = await fetch(url, {
         method: "PUT",
         headers: {
@@ -308,7 +310,7 @@ export default function ProfileAvatarMenu({
         return;
       }
 
-      const url = `http://localhost:3004/users/${user.id}`;
+      const url = `${resolveApiBase()}/users/${user.id}`;
       const res = await fetch(url, {
         method: "PUT",
         headers: {
@@ -356,9 +358,7 @@ const handleLogout = async () => {
       return onLogout();
     }
     // Fallback: clear locally and navigate
-    await SecureStore.deleteItemAsync("authToken");
-    await SecureStore.deleteItemAsync("refreshToken");
-    await SecureStore.deleteItemAsync("profilePicture");
+    await clearSession();
     navigation?.replace?.("Welcome");
   } catch (e) {
     console.error("[ProfilePic] Logout error:", e);

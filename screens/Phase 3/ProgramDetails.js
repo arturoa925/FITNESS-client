@@ -25,23 +25,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import Constants from "expo-constants";
 
-// Helper to resolve the API base URL (no trailing slash, no `/api`)
-const resolveApiBase = () => {
-  const env = process.env.EXPO_PUBLIC_API_BASE?.trim();
-  if (env) return env.replace(/\/+$/, "");
-  let host = null;
-  try {
-    const hostUri =
-      Constants?.expoConfig?.hostUri ||
-      Constants?.manifest2?.extra?.expoGo?.debuggerHost ||
-      Constants?.manifest?.debuggerHost;
-    if (hostUri) host = String(hostUri).split(":")[0];
-  } catch {}
-  if (Platform.OS === "android") {
-    return host ? `http://${host}:3004` : `http://10.0.2.2:3004`;
-  }
-  return host ? `http://${host}:3004` : `http://127.0.0.1:3004`;
-};
+import { resolveApiBase } from "../../utils/api";
 
 export default function ProgramDetails({ navigation, route }) {
   const { width, height, fontScale } = useWindowDimensions();
