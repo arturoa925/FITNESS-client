@@ -1,0 +1,23 @@
+name: build check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Compiles every screen and import into a real iOS (Hermes) bundle. Catches broken
+      # imports, syntax errors and missing dependencies without needing a simulator.
+      - name: Compile iOS bundle
+        run: npx expo export --platform ios --output-dir dist
+      - name: Dependency audit (never blocks; Expo tooling advisories are known)
+        run: npm audit --omit=dev --audit-level=critical
+        continue-on-error: true

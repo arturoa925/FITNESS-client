@@ -22,9 +22,12 @@ Branch: `claude/determined-lovelace-lxs1ad`. Server-side changes and the full wr
 - `AsyncStorage.setItem` is called inside `setState` updaters in `UserContext` (can double-run in StrictMode / write out of order).
 - Client `npm audit` shows 38 advisories (mostly Expo tooling); not changed because fixes mean an Expo SDK upgrade.
 - Screens other than AuthGate don't yet react to a 401 mid-session (they just show their error state).
-- No tests/lint/CI.
+- No lint yet.
 
 ## Update: session handling
 - Access tokens are now **15 minutes**; a rotating **refresh token** (30 days, sliding) keeps users signed in. `lib/http.js` refreshes silently on a 401 and retries the request; only if the refresh token is gone/revoked/expired does the app wipe the session and return to Welcome. A network failure while refreshing keeps the user signed in.
 - Logout, password change and Face ID all go through the same session model (see the server's `docs/SECURITY_REVIEW.md`).
 - Test: `tests/interceptor/` (14 checks).
+
+## Update: CI
+`.github/workflows/build-check.yml` runs `npm ci` and `npx expo export --platform ios` on every push/PR: it compiles the whole app into a real Hermes bundle, catching broken imports/syntax without a simulator. (Verified locally: `npm ci` + export succeed.) Dependabot is enabled for npm and Actions.
