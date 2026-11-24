@@ -28,6 +28,11 @@ import TodaysSession from "./screens/Phase 3/TodaysSession";
 import ProgramDetails from "./screens/Phase 3/ProgramDetails";
 
 import { NavigationContainer } from "@react-navigation/native";
+import { navigationRef } from "./lib/navigation";
+import { installAuthInterceptor } from "./lib/http";
+
+// Return to Welcome automatically whenever the server says the session has expired.
+installAuthInterceptor();
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 const Stack = createNativeStackNavigator();
 
@@ -54,7 +59,7 @@ export default function App() {
       <View style={tw`flex-1 bg-white`}>
         {!showLoader && (
           <UserProvider>
-          <NavigationContainer>
+          <NavigationContainer ref={navigationRef}>
             <Stack.Navigator
               screenOptions={{ headerShown: false }}
               initialRouteName="AuthGate"

@@ -723,6 +723,18 @@ export default function Welcome({ navigation, route }) {
                 Welcome to Fitness
               </Text>
 
+              {route?.params?.sessionExpired ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[
+                    tw`text-center mt-2`,
+                    { color: "#FDE68A", fontFamily: "Manrope", fontSize: bodySize },
+                  ]}
+                >
+                  Your session expired. Please sign in again.
+                </Text>
+              ) : null}
+
               {/* Subheads */}
               <Text
                 style={[

@@ -9,6 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
 import * as SecureStore from "expo-secure-store";
 import { resolveApiBase } from "../utils/api";
+import { onSessionExpired } from "../lib/session";
 
 const UserContext = createContext();
 
@@ -634,6 +635,9 @@ export const UserProvider = ({ children }) => {
       console.error("[UserProvider] resetLocalState failed:", e);
     }
   }, []);
+
+  // Server said the session is over (401): drop in-memory account state too.
+  useEffect(() => onSessionExpired(() => { resetLocalState(); }), [resetLocalState]);
 
   const value = {
     user,
